@@ -94,6 +94,8 @@ if (!FEATURES.conversation) {
   state.resourceLanguages = [];
   state.resourceGroups = [];
   state.resourceTypes = [];
+  state.resourceTags = [];
+  state.resourceDecks = [];
   state.items = Array.isArray(state.items) ? state.items : [];
   state.editorAnnotations = Array.isArray(state.editorAnnotations) ? state.editorAnnotations : [];
   state.reviewLog = state.reviewLog && typeof state.reviewLog === 'object' ? state.reviewLog : {};
@@ -844,6 +846,8 @@ if (!FEATURES.conversation) {
     state.resourceLanguages = settings?.languages || [];
     state.resourceGroups = settings?.groups || [];
     state.resourceTypes = settings?.types || [];
+    state.resourceTags = settings?.tags || [];
+    state.resourceDecks = settings?.decks || [];
     updateSyncIndicator();
     clearTimeout(projectionRenderTimer);
     projectionRenderTimer = setTimeout(() => {
@@ -2719,7 +2723,7 @@ if (!FEATURES.conversation) {
     const config = confirmed && !confirmed.deleted ? confirmed.data : {};
     const sources = engine.settingsSources().filter(source => candidate.sourceId ? source.id.startsWith(candidate.sourceId + ':') : source.id === 'legacy');
     const match = (key, value, extraName) => {
-      const valid = (config[key] || []).filter(item => key !== 'types' || config.groups?.some(group => group.id === item.group));
+      const valid = config[key] || [];
       const direct = valid.find(item => item.id === value);
       if (direct) return direct.id;
       const names = new Set([value, extraName, ...sources.flatMap(source => (source.settings[key] || []).filter(item => item.id === value).map(item => item.name))].filter(Boolean));
@@ -2779,7 +2783,7 @@ if (!FEATURES.conversation) {
         const add = button('import', item.id, item.asCopy ? '添加为独立内容' : '添加到同步', !backup.ready || item.entity === 'settings' || item.entity === 'resource' && configPending);
         content += `<p>${item.sourceId ? (item.asCopy ? '来自其他云端的备份，添加后会作为独立内容保存。' : '仅在这份备份中找到，确认后才会添加。') : '仅在这台设备找到'}</p>`;
         if (unmatched) {
-          content += `<details class="sync-recovery" data-panel-key="mapping:${esc(item.id)}"><summary>高级恢复</summary><p>请确认这份内容使用的类型和语言，再添加到同步。</p><label>类型<select data-candidate-type data-input-key="${esc(item.id)}:type"><option value="">请选择类型</option>${(config.types || []).filter(type => config.groups?.some(group => group.id === type.group)).map(type => `<option value="${esc(type.id)}" ${mapping.type === type.id ? 'selected' : ''}>${esc(type.name)}</option>`).join('')}</select></label><label>语言<select data-candidate-language data-input-key="${esc(item.id)}:language"><option value="">请选择语言</option><option value="__any__" ${mapping.language_id === null ? 'selected' : ''}>不限语言</option>${(config.languages || []).map(language => `<option value="${esc(language.id)}" ${mapping.language_id === language.id ? 'selected' : ''}>${esc(language.name)}</option>`).join('')}</select></label><div class="settings-actions">${button('configure', item.id, '添加语言或类型')}${add}</div></details>`;
+          content += `<details class="sync-recovery" data-panel-key="mapping:${esc(item.id)}"><summary>高级恢复</summary><p>请确认这份内容使用的类型和语言，再添加到同步。</p><label>类型<select data-candidate-type data-input-key="${esc(item.id)}:type"><option value="">请选择类型</option>${(config.types || []).map(type => `<option value="${esc(type.id)}" ${mapping.type === type.id ? 'selected' : ''}>${esc(type.name)}</option>`).join('')}</select></label><label>语言<select data-candidate-language data-input-key="${esc(item.id)}:language"><option value="">请选择语言</option><option value="__any__" ${mapping.language_id === null ? 'selected' : ''}>不限语言</option>${(config.languages || []).map(language => `<option value="${esc(language.id)}" ${mapping.language_id === language.id ? 'selected' : ''}>${esc(language.name)}</option>`).join('')}</select></label><div class="settings-actions">${button('configure', item.id, '添加语言或类型')}${add}</div></details>`;
         } else content += `<div class="settings-actions">${add}</div>`;
         if (!backup.ready) content += '<p class="small">请先连接云端，确认没有重复内容后再添加。</p>';
         else if (item.entity === 'resource' && configPending) content += '<p class="small">请先同步语言和类型，再添加这份内容。</p>';
@@ -3696,10 +3700,9 @@ if (!FEATURES.conversation) {
   let resourceEmojiDraft = '';
   const safeResourceUrl = value => { try { const url = new URL(value); return ['http:', 'https:'].includes(url.protocol) ? url.href : ''; } catch { return ''; } };
   const formatResourceDate = value => new Intl.DateTimeFormat(state.displayLanguage === 'en' ? 'en-US' : 'zh-CN', { dateStyle: 'medium' }).format(new Date(value));
-  const resourceGroupName = id => state.resourceGroups.find(group => group.id === id)?.name || id || '未分组';
-  const resourceType = id => state.resourceTypes.find(type => type.id === id) || { id, name: id || '未分类', group: state.resourceGroups[state.resourceGroups.length - 1]?.id || 'personal' };
+  const resourceType = id => state.resourceTypes.find(type => type.id === id) || { id, name: id || '未分类', emoji: '' };
   const resourceTypeName = id => resourceType(id).name;
-  const defaultResourceEmoji = item => ({ project: '💼', course: '🎓', website: '🔗', movie_series: '🎬', book: '📚', variety: '📺' }[item.type] || '🔖');
+  const defaultResourceEmoji = item => resourceType(item.type).emoji || ({ project: '📁', course: '🎓', website: '🌐', movie_series: '🎬', book: '📚', variety: '🎬', article: '📝', audio: '🎧', game: '🎮', other: '📌' }[item.type] || '🔖');
 
   function firstGrapheme(value) {
     const text = value.trim();
@@ -3753,10 +3756,7 @@ if (!FEATURES.conversation) {
 
   function fillResourceOptions(force = false) {
     const currentFilter = $('#resourceTypeFilter').value || 'all';
-    const grouped = state.resourceGroups.map(group => {
-      const items = state.resourceTypes.filter(type => type.group === group.id);
-      return items.length ? `<optgroup label="${esc(group.name)}">${items.map(type => `<option value="${esc(type.id)}">${esc(type.name)}</option>`).join('')}</optgroup>` : '';
-    }).join('');
+    const grouped = state.resourceTypes.map(type => `<option value="${esc(type.id)}">${esc(type.emoji || '')}${type.emoji ? ' ' : ''}${esc(type.name)}</option>`).join('');
     if (force || resourceComposer.hidden) {
       const currentLanguage = $('#resourceLanguage').value;
       $('#resourceLanguage').innerHTML = '<option value="">不限语言</option>' + state.resourceLanguages.map(item => `<option value="${esc(item.id)}">${esc(item.name)}</option>`).join('');
@@ -3799,11 +3799,7 @@ if (!FEATURES.conversation) {
     const resourceCount = $('#resourceCount');
     if (resourceCount) resourceCount.textContent = state.resources.filter(item => item.status !== 'completed').length;
     $('#resourceSummary').innerHTML = `<span><strong>${active.length}</strong> 项待处理</span><span><strong>${archived.length}</strong> 项已完成</span><span><strong>${topics.length}</strong> 个主题</span>`;
-    const ungrouped = active.filter(item => !state.resourceTypes.some(type => type.id === item.type && state.resourceGroups.some(group => group.id === type.group)));
-    $('#resourceActiveList').innerHTML = active.length ? state.resourceGroups.map(group => {
-      const items = active.filter(item => state.resourceTypes.some(type => type.id === item.type && type.group === group.id));
-      return items.length ? `<section class="resource-group"><h4>${esc(group.name)} <span>${items.length}</span></h4><div class="resource-card-grid">${items.map(resourceRow).join('')}</div></section>` : '';
-    }).join('') + (ungrouped.length ? `<section class="resource-group"><h4>未分类 / 待映射</h4><div class="resource-card-grid">${ungrouped.map(resourceRow).join('')}</div></section>` : '') : '<div class="resource-empty">这里已经清空了。添加一个真正想看的资源吧。</div>';
+    $('#resourceActiveList').innerHTML = active.length ? `<div class="resource-card-grid">${active.map(resourceRow).join('')}</div>` : '<div class="resource-empty">这里已经清空了。添加一个真正想看的资源吧。</div>';
     $('#resourceArchiveList').innerHTML = archived.length ? `<div class="resource-card-grid">${archived.map(resourceRow).join('')}</div>` : '<div class="resource-empty">完成的资源会连同日期出现在这里。</div>';
     $('#resourceSelectionBar').hidden = selectedResourceIds.size === 0;
     $('#resourceSelectionCount').textContent = `已选 ${selectedResourceIds.size} 项`;
@@ -3906,7 +3902,7 @@ if (!FEATURES.conversation) {
     $('#resourceDetailEmoji').textContent = item.emoji || defaultResourceEmoji(item);
     $('#resourceDetailName').textContent = item.name;
     $('#resourceDetailDescription').textContent = item.description || '没有说明';
-    $('#resourceDetailMeta').innerHTML = `<div><dt>类型</dt><dd>${esc(type.name)}</dd></div><div><dt>主题</dt><dd>${esc(item.topic || '未设置')}</dd></div><div><dt>语言</dt><dd>${esc(item.language || '不限语言')}</dd></div><div><dt>资源分组</dt><dd>${esc(resourceGroupName(type.group))}</dd></div><div><dt>状态</dt><dd>${esc(resourceStatusNames[item.status] || '未设置')}</dd></div><div class="wide"><dt>链接</dt><dd>${safeUrl ? `<a href="${esc(safeUrl)}" target="_blank" rel="noopener noreferrer">${esc(item.url)}</a>` : '未设置'}</dd></div>`;
+    $('#resourceDetailMeta').innerHTML = `<div><dt>类型</dt><dd>${esc(type.name)}</dd></div><div><dt>主题</dt><dd>${esc(item.topic || '未设置')}</dd></div><div><dt>语言</dt><dd>${esc(item.language || '不限语言')}</dd></div><div><dt>状态</dt><dd>${esc(resourceStatusNames[item.status] || '未设置')}</dd></div><div class="wide"><dt>链接</dt><dd>${safeUrl ? `<a href="${esc(safeUrl)}" target="_blank" rel="noopener noreferrer">${esc(item.url)}</a>` : '未设置'}</dd></div>`;
     applyInterfaceLanguage($('#resourceDetailDialog'));
     $('#openResourceDetailLink').hidden = !safeUrl;
     if (safeUrl) $('#openResourceDetailLink').href = safeUrl;
@@ -3965,10 +3961,7 @@ if (!FEATURES.conversation) {
     const name = item.name;
     const key = item.id;
     const noun = kind === 'language' ? '语言' : kind === 'group' ? '分组' : '类型';
-    return `<div class="resource-config-row" data-config-kind="${kind}" data-config-key="${esc(key)}"><input value="${esc(name)}" maxlength="80" aria-label="编辑${noun}名称">${kind === 'type' ? `<select aria-label="类型分组">${!state.resourceGroups.some(group => group.id === item.group) ? '<option value="">待修复：请选择有效分组</option>' : ''}${state.resourceGroups.map(group => `<option value="${esc(group.id)}" ${item.group === group.id ? 'selected' : ''}>${esc(group.name)}</option>`).join('')}</select>` : ''}<button class="btn" data-config-action="save" type="button">保存</button><button class="btn danger" data-config-action="remove" type="button">移除</button></div>`;
-  }
-  function orphanRepairControls() {
-    return `<p>原分组缺失，名称完整保留。请逐项选择分组后一次保存，或确认全部映射至指定分组。</p><label>统一映射的有效分组<select id="repairOrphanGroup"><option value="">请选择分组</option>${state.resourceGroups.map(group => `<option value="${esc(group.id)}">${esc(group.name)}</option>`).join('')}</select></label><button class="btn" type="button" data-repair-orphans="selected">保存全部逐项映射</button><button class="btn" type="button" data-repair-orphans="all">确认全部映射到所选分组</button>`;
+    return `<div class="resource-config-row" data-config-kind="${kind}" data-config-key="${esc(key)}">${kind === 'type' ? `<input class="resource-type-emoji" value="${esc(item.emoji || '')}" maxlength="16" aria-label="编辑类型图标" placeholder="📌">` : ''}<input value="${esc(name)}" maxlength="80" aria-label="编辑${noun}名称"><button class="btn" data-config-action="save" type="button">保存</button><button class="btn danger" data-config-action="remove" type="button">移除</button></div>`;
   }
 
   function renderResourceSettings(force = false) {
@@ -3976,36 +3969,26 @@ if (!FEATURES.conversation) {
     const focused = $('#resourceSettingsView').contains(document.activeElement);
     if (settingsDirtyRows.size || focused) {
       // 即使 force 也不覆盖脏行；只追加新配置，避免其他未保存项挡住新增项。
-      for (const [kind, items, selector] of [['language', state.resourceLanguages, '#resourceLanguageSettings'], ['group', state.resourceGroups, '#resourceGroupSettings'], ['type', state.resourceTypes, '#resourceTypeSettings']]) {
+      for (const [kind, items, selector] of [['language', state.resourceLanguages, '#resourceLanguageSettings'], ['type', state.resourceTypes, '#resourceTypeSettings']]) {
         const list = $(selector);
         for (const item of items) {
           if ([...list.querySelectorAll('[data-config-key]')].some(row => row.dataset.configKey === item.id)) continue;
-          let target = list;
-          if (kind === 'type') {
-            const group = state.resourceGroups.find(value => value.id === item.group);
-            const groupKey = group ? `group:${group.id}` : 'orphan';
-            target = [...list.querySelectorAll('[data-type-group]')].find(value => value.dataset.typeGroup === groupKey);
-            if (!target) {
-              list.insertAdjacentHTML('beforeend', `<div class="resource-config-group" data-type-group="${esc(groupKey)}" ${group ? '' : 'data-orphan-group'}><h4>${esc(group?.name || '待修复分组')}</h4>${group ? '' : orphanRepairControls()}</div>`);
-              target = list.lastElementChild;
-            }
-          }
-          target.insertAdjacentHTML('beforeend', resourceConfigRow(kind, item));
+          list.insertAdjacentHTML('beforeend', resourceConfigRow(kind, item));
         }
-      }
-      for (const select of [$('#newResourceTypeGroup'), $('#repairOrphanGroup'), ...$('#resourceTypeSettings').querySelectorAll('select')]) {
-        if (!select) continue;
-        for (const group of state.resourceGroups) if (![...select.options].some(option => option.value === group.id)) select.add(new Option(group.name, group.id));
       }
       if (settingsDirtyRows.size || !force) return;
     }
     $('#resourceLanguageSettings').innerHTML = state.resourceLanguages.map(item => resourceConfigRow('language', item)).join('');
-    $('#resourceGroupSettings').innerHTML = state.resourceGroups.map(item => resourceConfigRow('group', item)).join('');
-    $('#newResourceTypeGroup').innerHTML = state.resourceGroups.map(group => `<option value="${esc(group.id)}">${esc(group.name)}</option>`).join('');
-    const orphans = state.resourceTypes.filter(item => !state.resourceGroups.some(group => group.id === item.group));
-    $('#resourceTypeSettings').innerHTML = state.resourceGroups.map(group => `<div class="resource-config-group" data-type-group="group:${esc(group.id)}"><h4>${esc(group.name)}</h4>${state.resourceTypes.filter(item => item.group === group.id).map(item => resourceConfigRow('type', item)).join('') || '<p class="small">暂无类型</p>'}</div>`).join('') + (orphans.length ? `<div class="resource-config-group" data-type-group="orphan" data-orphan-group><h4>待修复分组</h4>${orphans.map(item => resourceConfigRow('type', item)).join('')}${orphanRepairControls()}</div>` : '');
+    $('#resourceTypeSettings').innerHTML = state.resourceTypes.map(item => resourceConfigRow('type', item)).join('');
   }
-  const resourceSettingsData = () => structuredClone({ languages: state.resourceLanguages, groups: state.resourceGroups, types: state.resourceTypes });
+  const resourceSettingsData = () => structuredClone({
+    schema_version: 3,
+    languages: state.resourceLanguages,
+    groups: state.resourceGroups,
+    types: state.resourceTypes,
+    tags: state.resourceTags,
+    decks: state.resourceDecks,
+  });
   function validResourceSettings(settings) {
     for (const [key, limit] of [['languages', 200], ['groups', 200], ['types', 500]]) {
       const names = new Set(), ids = new Set();
@@ -4016,11 +3999,11 @@ if (!FEATURES.conversation) {
         ids.add(item.id); names.add(name);
       }
     }
-    return settings.types.every(item => settings.groups.some(group => group.id === item.group));
+    return true;
   }
 
   async function persistResourceSettings(settings) {
-    if (!validResourceSettings(settings)) { notify('名称不能为空或重复，ID 必须唯一，类型必须引用有效分组；不限语言是独立选项。', 'error'); return false; }
+    if (!validResourceSettings(settings)) { notify('名称不能为空或重复，ID 必须唯一；不限语言是独立选项。', 'error'); return false; }
     if (resourceSettingsBusy) return false;
     resourceSettingsBusy = true;
     $('#resourceSettingsView').inert = true;
@@ -4039,55 +4022,23 @@ if (!FEATURES.conversation) {
   $('#resourceSettingsView').addEventListener('change', markSettingsDirty);
   for (const [formId, inputId, key] of [
     ['addResourceLanguageForm', 'newResourceLanguage', 'languages'],
-    ['addResourceGroupForm', 'newResourceGroup', 'groups'],
     ['addResourceTypeForm', 'newResourceType', 'types']
   ]) {
     $('#' + formId).onsubmit = async event => {
       event.preventDefault();
       const input = $('#' + inputId), settings = resourceSettingsData();
       const item = { id: crypto.randomUUID(), name: input.value.trim() };
-      if (key === 'types') item.group = $('#newResourceTypeGroup').value;
+      if (key === 'types') item.emoji = firstGrapheme($('#newResourceTypeEmoji')?.value || '');
       settings[key].push(item);
-      const repairedRows = [];
-      if (key === 'groups' && !state.resourceGroups.length && settings.types.length) {
-        if (!await confirmAction('当前所有类型都缺少有效分组。确认保留全部类型名称，并将它们一起映射到这个新分组？', { title: '创建分组并修复', confirmLabel: '确认修复全部' })) return;
-        for (const type of settings.types) {
-          const row = [...$('#resourceTypeSettings').querySelectorAll('[data-config-key]')].find(value => value.dataset.configKey === type.id);
-          if (row) { type.name = row.querySelector('input').value.trim(); repairedRows.push(row); }
-          type.group = item.id;
-        }
-      }
       if (!await persistResourceSettings(settings)) return;
-      for (const row of repairedRows) settingsDirtyRows.delete(row);
       input.value = '';
+      if (key === 'types' && $('#newResourceTypeEmoji')) $('#newResourceTypeEmoji').value = '';
       settingsDirtyRows.delete($('#' + formId));
       renderResourceSettings(true);
       notify('资源设置已保存本机；云端进度请查看同步状态。');
     };
   }
   $('#resourceSettingsView').onclick = async event => {
-    const repair = event.target.closest('[data-repair-orphans]');
-    if (repair && !resourceSettingsBusy) {
-      const settings = resourceSettingsData();
-      const orphans = settings.types.filter(item => !settings.groups.some(group => group.id === item.group));
-      const group = $('#repairOrphanGroup')?.value;
-      if (repair.dataset.repairOrphans === 'all' && !settings.groups.some(item => item.id === group)) return notify('请选择有效分组。', 'error');
-      const rows = [];
-      for (const item of orphans) {
-        const row = [...$('#resourceTypeSettings').querySelectorAll('[data-config-key]')].find(value => value.dataset.configKey === item.id);
-        if (!row) return notify('类型列表已变化，请刷新设置视图后再试。', 'error');
-        item.name = row.querySelector('input').value.trim();
-        item.group = repair.dataset.repairOrphans === 'all' ? group : row.querySelector('select').value;
-        rows.push(row);
-      }
-      if (!validResourceSettings(settings)) return notify('请为全部孤立类型选择有效分组，并保留有效且不重复的名称。当前输入不会清除。', 'error');
-      if (!await confirmAction(`确认一次保存 ${orphans.length} 个孤立类型的分组映射与当前名称？不会删除任何类型。`, { title: '修复类型分组', confirmLabel: '确认保存全部' })) return;
-      if (!await persistResourceSettings(settings)) return;
-      for (const row of rows) settingsDirtyRows.delete(row);
-      renderResourceSettings(true);
-      notify('全部分组映射已保存本机，等待 CAS 同步确认。');
-      return;
-    }
     const action = event.target.closest('[data-config-action]');
     if (!action || resourceSettingsBusy) return;
     const row = action.closest('[data-config-kind]'), kind = row.dataset.configKind, id = row.dataset.configKey;
@@ -4096,10 +4047,9 @@ if (!FEATURES.conversation) {
     if (!item) return notify('此配置已被远端移除，输入保留；请先处理同步状态。', 'error');
     if (action.dataset.configAction === 'save') {
       item.name = row.querySelector('input').value.trim();
-      if (kind === 'type') item.group = row.querySelector('select').value;
+      if (kind === 'type') item.emoji = firstGrapheme(row.querySelector('.resource-type-emoji')?.value || '');
     } else {
-      const inUse = kind === 'group' ? settings.types.some(entry => entry.group === id)
-        : state.resources.some(entry => kind === 'language' ? entry.language_id === id : entry.type === id);
+      const inUse = state.resources.some(entry => kind === 'language' ? entry.language_id === id : entry.type === id);
       if (inUse) return notify('此配置仍被活动资源或类型引用，请先修改引用。服务器也会再次校验。', 'error');
       if (!await confirmAction(`移除“${item.name}”？其稳定 ID 不会被重用。`, { title: '移除资源配置', confirmLabel: '移除' })) return;
       settings[key] = settings[key].filter(entry => entry.id !== id);

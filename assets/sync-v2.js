@@ -172,7 +172,7 @@ function candidatePatch(state, candidate, remote) {
     const oldType = oldSettings?.types.find(item => item.id === values.type);
     const currentType = settings.types.find(item => item.id === values.type) ||
       (oldType && settings.types.find(item => item.name === oldType.name));
-    if (!currentType || !settings.groups.some(group => group.id === currentType.group)) throw new Error('这份内容的分类已不存在，旧内容已保留在备份中。');
+    if (!currentType) throw new Error('这份内容的类型已不存在，旧内容已保留在备份中。');
     values.type = currentType.id;
     if (values.language_id !== null && !settings.languages.some(item => item.id === values.language_id)) {
       const oldLanguage = oldSettings?.languages.find(item => item.id === values.language_id);
@@ -225,7 +225,7 @@ function backupCandidateData(entity, data) {
 
 function backupSettings(value) {
   if (!record(value)) return null;
-  const fields = [['languages', 'resourceLanguages'], ['groups', 'resourceGroups'], ['types', 'resourceTypes']];
+  const fields = [['languages', 'resourceLanguages'], ['groups', 'resourceGroups'], ['types', 'resourceTypes'], ['tags', 'resourceTags'], ['decks', 'resourceDecks']];
   if (!fields.some(([key, alias]) => Array.isArray(value[key]) || Array.isArray(value[alias]))) return null;
   return Object.fromEntries(fields.map(([key, alias]) => [key, (value[key] ?? value[alias] ?? []).map((item, index) => {
     if (typeof item === 'string') return { id: `legacy-${key}-${index}`, name: item };
@@ -245,18 +245,23 @@ function settingsSources(state) {
 }
 
 function validateSettings(settings) {
-  for (const [key, limit] of [['languages', 200], ['groups', 200], ['types', 500]]) {
+  settings.tags ??= [];
+  settings.decks ??= [];
+  for (const [key, limit] of [['languages', 200], ['groups', 200], ['types', 500], ['tags', 1000], ['decks', 500]]) {
     const ids = new Set(), names = new Set();
     if (!Array.isArray(settings[key]) || settings[key].length > limit) throw new Error('配置数量无效。');
     for (const item of settings[key]) {
+      const normalizedName = key === 'tags' || key === 'decks'
+        ? item.name?.trim().normalize('NFKC').toLocaleLowerCase()
+        : item.name?.trim();
       if (typeof item.id !== 'string' || !item.id || ids.has(item.id) || typeof item.name !== 'string' ||
-        !item.name.trim() || item.name.length > 80 || names.has(item.name.trim()) || key === 'languages' && item.name.trim() === '不限语言') {
+        !item.name.trim() || item.name.length > 80 || names.has(normalizedName) || key === 'languages' && item.name.trim() === '不限语言') {
         throw new Error('配置名称或 ID 无效、重复；请保留原始备份并手动修正。');
       }
-      ids.add(item.id); names.add(item.name.trim());
+      ids.add(item.id); names.add(normalizedName);
     }
   }
-  if (settings.types.some(item => !settings.groups.some(group => group.id === item.group))) throw new Error('类型必须映射到有效分组，请先修复全部孤立类型。');
+  // group 是旧版迁移字段；Type 自 v3 起独立存在。
 }
 
 function extractBackup(payload) {
@@ -695,7 +700,7 @@ export class NotebookSync {
           // UI 分两步导入：配置先经过 CAS 并收到确认，资源不能引用未确认或冲突中的配置。
           const confirmed = state.base[keyOf('settings', 'resources')];
           if (!state.ready || !confirmed || confirmed.deleted || state.queue.some(entry => entry.entity === 'settings')) throw new Error('请先保存资源配置并同步确认，再选择类型和语言导入。');
-          if (!confirmed.data.types?.some(item => item.id === mapping.type && confirmed.data.groups?.some(group => group.id === item.group)) ||
+          if (!confirmed.data.types?.some(item => item.id === mapping.type) ||
             mapping.language_id !== null && !confirmed.data.languages?.some(item => item.id === mapping.language_id)) throw new Error('所选类型或语言已失效，请重新选择。');
           patch.type = mapping.type;
           patch.language_id = mapping.language_id;

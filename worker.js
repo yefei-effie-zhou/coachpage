@@ -1019,25 +1019,40 @@ function syncId(value, field = 'id', max = 120) {
 }
 
 function syncSettings(value) {
-  const result = { id: 'resources' };
+  const result = { id: 'resources', schema_version: 3 };
   for (const [key, limit] of [['languages', 200], ['groups', 200], ['types', 500]]) {
     syncAssert(Array.isArray(value[key]) && value[key].length <= limit, `${key} 必须是数组且不能超过 ${limit} 项。`);
     const ids = new Set();
     const names = new Set();
     result[key] = value[key].map(item => {
       syncAssert(syncRecord(item), `${key} 项必须是对象。`);
-      syncAssert(Object.keys(item).every(k => (key === 'types' ? ['id', 'name', 'group'] : ['id', 'name']).includes(k)), `${key} 存在未知字段。`);
+      syncAssert(Object.keys(item).every(k => (key === 'types' ? ['id', 'name', 'group', 'emoji'] : ['id', 'name']).includes(k)), `${key} 存在未知字段。`);
       const id = syncId(item.id);
       const name = syncText(item.name, 'name', 80, true).trim();
       syncAssert(!ids.has(id) && !names.has(name), `${key} 的 ID 和名称不能重复。`);
       syncAssert(key !== 'languages' || name !== '不限语言', '不限语言使用 language_id: null，不能作为语言标签。');
       ids.add(id);
       names.add(name);
-      return key === 'types' ? { id, name, group: syncId(item.group, 'group') } : { id, name };
+      if (key !== 'types') return { id, name };
+      const type = { id, name, emoji: syncText(item.emoji ?? '', 'emoji', 32).trim() };
+      // group 仅作为历史迁移信息保留；新类型不再依赖分组。
+      if (item.group) type.group = syncId(item.group, 'group');
+      return type;
     });
   }
-  const groups = new Set(result.groups.map(item => item.id));
-  syncAssert(result.types.every(item => groups.has(item.group)), '类型引用了不存在的 group。');
+  for (const [key, limit] of [['tags', 1000], ['decks', 500]]) {
+    const ids = new Set(), names = new Set();
+    const source = value[key] ?? [];
+    syncAssert(Array.isArray(source) && source.length <= limit, `${key} 必须是数组且不能超过 ${limit} 项。`);
+    result[key] = source.map(item => {
+      syncAssert(syncRecord(item) && Object.keys(item).every(k => ['id', 'name', 'emoji'].includes(k)), `${key} 项格式无效。`);
+      const id = syncId(item.id), name = syncText(item.name, 'name', 80, true).trim();
+      const normalized = name.normalize('NFKC').toLocaleLowerCase();
+      syncAssert(!ids.has(id) && !names.has(normalized), `${key} 的 ID 和名称不能重复。`);
+      ids.add(id); names.add(normalized);
+      return { id, name, emoji: syncText(item.emoji ?? '', 'emoji', 32).trim() };
+    });
+  }
   return result;
 }
 
@@ -1053,12 +1068,15 @@ async function syncSeedSettings(row) {
     { id: 'work', name: '工作' }, { id: 'study', name: '学习' }, { id: 'personal', name: '课余' },
   ];
   const types = row ? readArray('types_json') : [
-    { id: 'project', name: '项目资料', group: 'work' },
-    { id: 'course', name: '课程', group: 'study' },
-    { id: 'website', name: '学习网站', group: 'study' },
-    { id: 'movie_series', name: '电影 / 剧集', group: 'personal' },
-    { id: 'book', name: '书籍', group: 'personal' },
-    { id: 'variety', name: '综艺', group: 'personal' },
+    { id: 'movie_series', name: '影视', emoji: '🎬' },
+    { id: 'book', name: '书籍', emoji: '📚' },
+    { id: 'article', name: '文章', emoji: '📝' },
+    { id: 'audio', name: '音频', emoji: '🎧' },
+    { id: 'course', name: '课程', emoji: '🎓' },
+    { id: 'website', name: '网站 / 工具', emoji: '🌐' },
+    { id: 'project', name: '项目资料', emoji: '📁' },
+    { id: 'game', name: '游戏', emoji: '🎮' },
+    { id: 'other', name: '其他', emoji: '📌' },
   ];
   const converted = [];
   for (const item of languages) {
@@ -1067,7 +1085,7 @@ async function syncSeedSettings(row) {
     converted.push({ id: typeof item === 'string' ? `lang_${await syncHash(name)}` : item.id, name });
   }
   // 迁移不套用写入时的裁剪/去重规则，避免静默丢失历史自定义名称。
-  return { id: 'resources', languages: converted, groups, types };
+  return { id: 'resources', schema_version: 3, languages: converted, groups, types, tags: [], decks: [] };
 }
 
 async function ensureSyncV2(db, readOnly) {
@@ -1160,8 +1178,8 @@ function syncNormalizeData(op, current, snapshot) {
   const allowedFields = {
     card: ['id', 'text', 'sentence', 'meaning', 'note', 'level', 'next_review', 'language', 'created_at', 'updated_at'],
     document: ['id', 'document_date', 'title', 'html', 'video_url', 'audio_url', 'annotations', 'language', 'created_at', 'updated_at'],
-    resource: ['id', 'name', 'url', 'type', 'language_id', 'language', 'legacy_language', 'topic', 'description', 'emoji', 'status', 'completed_at', 'created_at', 'updated_at'],
-    settings: ['id', 'languages', 'groups', 'types'],
+    resource: ['id', 'name', 'url', 'type', 'language_id', 'language', 'legacy_language', 'topic', 'description', 'emoji', 'tag_ids', 'deck_ids', 'status', 'completed_at', 'created_at', 'updated_at'],
+    settings: ['id', 'schema_version', 'languages', 'groups', 'types', 'tags', 'decks'],
   };
   syncAssert(Object.keys(op.patch).every(key => allowedFields[op.entity].includes(key)), 'patch 含有未知字段。');
   syncAssert(op.patch.id === undefined || op.patch.id === op.id, 'patch.id 不能修改对象 ID。');
@@ -1219,6 +1237,13 @@ function syncNormalizeData(op, current, snapshot) {
       syncAssert(op.patch.language === '' || op.patch.language === '不限语言' || op.patch.language === data.legacy_language, '指定语言必须提供有效的 language_id。');
     }
     data.language = language?.name || data.legacy_language || '不限语言';
+    for (const [field, config] of [['tag_ids', settings?.tags || []], ['deck_ids', settings?.decks || []]]) {
+      const ids = value[field] ?? current?.data[field] ?? [];
+      syncAssert(Array.isArray(ids) && ids.length <= 500 && ids.every(id => typeof id === 'string'), `${field} 必须是字符串数组。`);
+      data[field] = [...new Set(ids)];
+      const valid = new Set(config.map(item => item.id));
+      syncAssert(data[field].every(id => valid.has(id)), `${field} 引用了不存在的配置。`);
+    }
     data.status = value.status ?? 'backlog';
     syncAssert(['backlog', 'active', 'completed'].includes(data.status), 'status 无效。');
     data.completed_at = value.completed_at ? syncTime(syncText(value.completed_at, 'completed_at', 40), null) : '';
