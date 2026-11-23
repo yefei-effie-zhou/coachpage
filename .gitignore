@@ -1,0 +1,16 @@
+.DS_Store
+node_modules/
+dist/
+
+# Downloaded production snapshots retained locally for comparison only.
+assets/app.production-sync.js
+assets/app.tiptap-before-sync-merge.js
+assets/sync-v2.production.js
+index.production-sync.html
+
+# Local tooling and environment files.
+.env
+.env.*
+!.env.example
+.wrangler/
+*.log
