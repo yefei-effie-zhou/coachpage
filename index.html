@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f7f7f5" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#171a18" media="(prefers-color-scheme: dark)" />
+  <title>Notebook - Language Workspace</title>
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body data-active-view="editor" data-ui-language="nl">
+<a class="skip-link" href="#mainContent">跳到主要内容</a>
+<div class="app">
+  <header>
+    <div class="brand">
+      <div class="mark" id="productMark" aria-hidden="true">📓</div>
+      <nav class="product-switch" aria-label="Products" translate="no">
+        <button class="product-tab active" type="button" aria-pressed="true" data-product-view="notebook"><strong>Notebook</strong><span>Language workspace</span></button>
+        <button class="product-tab" type="button" aria-pressed="false" data-product-view="resources"><strong>Resources</strong><span>Saved for later</span></button>
+      </nav>
+    </div>
+    <div class="header-actions">
+      <label class="display-language"><span class="sr-only">界面语言</span><select id="displayLanguage" name="display_language" aria-label="界面语言"><option value="zh">中文</option><option value="en">英文</option></select></label>
+      <details class="site-font-control" id="siteFontControl">
+        <summary aria-label="调整全站字号" title="调整全站字号">Aa</summary>
+        <div class="site-font-popover">
+          <button type="button" class="site-font-close" id="closeSiteFont" aria-label="关闭字号设置">×</button>
+          <button type="button" id="decreaseSiteFont" aria-label="缩小字号">A−</button>
+          <input id="siteFontScale" name="site_font_scale" type="range" min="90" max="125" step="5" aria-label="全站字号">
+          <button type="button" id="increaseSiteFont" aria-label="放大字号">A+</button>
+          <output id="siteFontScaleValue">100%</output>
+          <button type="button" class="site-font-reset" id="resetSiteFont">默认</button>
+        </div>
+      </details>
+      <!-- 云端连接状态 -->
+      <button class="sync-indicator offline" id="syncStatus" type="button" aria-live="polite" title="打开云端设置">
+        <span class="sync-dot offline"></span> 未连接云端
+      </button>
+      <button class="btn" id="saveAsNewBtn">保存到新文本</button>
+      <button class="btn primary" id="updateHistoryBtn" hidden>更新历史文本</button>
+    </div>
+  </header>
+  <div class="layout">
+    <aside class="panel side">
+      <div class="nav">
+        <button class="active" data-view="editor">当前编辑 <span class="count" id="annotationCount">0</span></button>
+        <button data-view="history">历史全文 <span class="count" id="archiveCount">0</span></button>
+        <button data-view="cards">词卡列表 <span class="count" id="cardListCount">0</span></button>
+        <button data-view="daily-review">今日复习 <span class="count" id="dueCount">0</span></button>
+        <button data-view="settings">设置</button>
+      </div>
+      <div class="side-section">
+        <h2>收集说明</h2>
+        <p class="small">选中文字，即可连同原句保存为词卡。</p>
+      </div>
+      <div class="side-section">
+        <h2>掌握进度</h2>
+        <div class="progress"><i id="progressBar" style="width:0%"></i></div>
+        <p class="small" id="progressText">还没有已掌握的卡片</p>
+      </div>
+    </aside>
+    <main id="mainContent" tabindex="-1">
+      <div class="workspace" id="workspace">
+      <section class="panel toolbar">
+        <input aria-label="文本标题" class="title-input" id="docTitle" name="document_title" autocomplete="off" value="荷兰语文本"/>
+        <button class="editor-mode-toggle is-editing" id="editorModeToggle" type="button" aria-label="当前为编辑模式，点击切换到阅读模式" title="切换到阅读模式">
+          <svg class="mode-icon mode-icon-edit" aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M4.5 19.5h4l10-10a2.8 2.8 0 0 0-4-4l-10 10v4Z"/>
+            <path d="m13.5 6.5 4 4M4.5 15.5l4 4M4 7.5V4h6.5M20 13.5V20H12"/>
+          </svg>
+          <svg class="mode-icon mode-icon-read" aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M6 3.5h8l4 4V13M14 3.5v4h4"/>
+            <path d="M11.5 18s2.4-3.2 5.5-3.2 5.5 3.2 5.5 3.2-2.4 3.2-5.5 3.2-5.5-3.2-5.5-3.2Z"/>
+            <circle cx="17" cy="18" r="1.25"/>
+            <path d="M10 20.5H6a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2"/>
+          </svg>
+        </button>
+        <details class="language-dropdown">
+          <summary><span id="editorLanguageLabel">荷兰语</span><span aria-hidden="true">⌄</span></summary>
+          <div class="language-checklist" role="group" aria-label="学习语言">
+            <label><input type="checkbox" name="document_language" value="nl" data-language="nl" checked><span>荷兰语</span></label>
+            <label><input type="checkbox" name="document_language" value="en" data-language="en"><span>英语</span></label>
+            <label><input type="checkbox" name="document_language" value="ja" data-language="ja"><span>日语</span></label>
+          </div>
+        </details>
+        <input aria-label="学习日期" class="document-date" id="documentDate" name="document_date" type="date">
+        <div class="toolbar-actions"><button class="btn media-trigger" id="openMediaBtn" type="button">媒体</button><span class="status" id="saveStatus" role="status" aria-live="polite">点击新建开始编辑</span></div>
+      </section>
+      <section class="editor-tools" id="editorTools" aria-label="文本编辑工具栏">
+        <div class="editor-tool-row editor-tool-primary">
+          <select class="tool-format-icon" data-editor-format aria-label="段落样式" title="段落样式"><option value="p">¶</option><option value="h2">H2</option><option value="h3">H3</option><option value="blockquote">❝</option></select>
+          <button type="button" data-editor-command="undo" aria-label="撤销" title="撤销">↶</button>
+          <button type="button" data-editor-command="redo" aria-label="重做" title="重做">↷</button>
+          <span class="tool-divider"></span>
+          <button type="button" data-editor-command="bold" aria-label="粗体" title="粗体"><strong>B</strong></button>
+          <details class="highlight-picker">
+            <summary aria-label="选择高亮颜色" title="高亮"><span class="highlight-icon">A</span></summary>
+            <div class="highlight-palette" role="group" aria-label="高亮颜色">
+              <button type="button" data-highlight-color="#fbe6a9" aria-label="黄色高亮" style="--highlight:#fbe6a9"></button>
+              <button type="button" data-highlight-color="#cfe9df" aria-label="绿色高亮" style="--highlight:#cfe9df"></button>
+              <button type="button" data-highlight-color="#dbe6fb" aria-label="蓝色高亮" style="--highlight:#dbe6fb"></button>
+              <button type="button" data-highlight-color="#f5d9e4" aria-label="粉色高亮" style="--highlight:#f5d9e4"></button>
+            </div>
+          </details>
+          <span class="tool-divider"></span>
+          <button type="button" data-editor-command="insertUnorderedList" aria-label="项目符号" title="项目符号"><span class="list-icon">•<i></i><i></i><i></i></span></button>
+          <details class="editor-more">
+            <summary aria-label="展开更多编辑工具" title="更多工具">•••</summary>
+            <div class="editor-more-menu">
+              <button type="button" data-editor-command="italic" aria-label="斜体" title="斜体"><em>I</em></button>
+              <button type="button" data-editor-command="underline" aria-label="下划线" title="下划线"><u>U</u></button>
+              <button type="button" data-editor-command="insertOrderedList" aria-label="编号列表" title="编号列表"><span class="ordered-icon">1<br>2<br>3</span></button>
+              <button type="button" data-editor-command="justifyLeft" aria-label="左对齐" title="左对齐"><span class="align-icon left"></span></button>
+              <button type="button" data-editor-command="justifyCenter" aria-label="居中" title="居中"><span class="align-icon center"></span></button>
+              <button type="button" data-editor-command="justifyRight" aria-label="右对齐" title="右对齐"><span class="align-icon right"></span></button>
+              <button type="button" data-editor-command="indent" aria-label="增加缩进" title="增加缩进">⇥</button>
+              <button type="button" data-editor-command="outdent" aria-label="减少缩进" title="减少缩进">⇤</button>
+              <button type="button" data-editor-action="link" aria-label="添加链接" title="添加链接"><span class="link-tool-icon"></span></button>
+              <button type="button" data-editor-block="h2" aria-label="章节标题" title="章节标题">H2</button>
+              <button type="button" data-editor-block="h3" aria-label="小标题" title="小标题">H3</button>
+              <button type="button" data-editor-block="blockquote" aria-label="专业引用" title="专业引用">❝</button>
+              <button type="button" data-editor-block="pre" aria-label="代码块" title="代码块">&lt;/&gt;</button>
+              <button type="button" data-editor-action="divider" aria-label="分隔线" title="分隔线">―</button>
+              <button type="button" data-editor-action="table" aria-label="2 × 2 表格" title="2 × 2 表格">▦</button>
+              <button type="button" data-editor-command="superscript" aria-label="上标" title="上标">x²</button>
+              <button type="button" data-editor-command="subscript" aria-label="下标" title="下标">x₂</button>
+              <button type="button" data-editor-command="removeFormat" aria-label="清除格式" title="清除格式">Tx</button>
+            </div>
+          </details>
+        </div>
+      </section>
+      <section class="panel ja-analyzer" id="japaneseAnalyzer" aria-labelledby="japaneseAnalyzerTitle" hidden>
+        <div class="ja-analyzer-head">
+          <div><h2 id="japaneseAnalyzerTitle">解析</h2><p>查看分词、读音、词性与释义。</p></div>
+          <button class="btn" id="toggleJapaneseAnalyzer" type="button">收起</button>
+        </div>
+        <div id="japaneseAnalyzerBody">
+          <div class="ja-analyzer-input">
+            <label class="sr-only" for="japaneseAnalyzerText">需要解析的日语文本</label>
+            <textarea id="japaneseAnalyzerText" name="japanese_text" maxlength="2000" autocomplete="off" placeholder="输入日语，或选取正文…"></textarea>
+            <button class="btn" id="useJapaneseSelection" type="button">选取正文</button>
+            <button class="btn primary" id="analyzeJapanese" type="button">解析</button>
+          </div>
+          <div class="ja-analyzer-options">
+            <label><input id="showJapaneseFurigana" name="show_furigana" type="checkbox" checked> 显示假名</label>
+            <label><input id="showJapaneseRomaji" name="show_romaji" type="checkbox" checked> 显示罗马字</label>
+          </div>
+          <div class="ja-analysis-result" id="japaneseAnalysisResult" hidden>
+            <p class="ja-translation" id="japaneseTranslation"></p>
+            <div class="ja-tokens" id="japaneseTokens"></div>
+            <div class="ja-word-detail" id="japaneseWordDetail" hidden></div>
+          </div>
+          <div class="ja-analyzer-status" id="japaneseAnalyzerStatus" role="status" aria-live="polite"></div>
+        </div>
+      </section>
+      <div class="media-switcher" id="mediaSwitcher" hidden>
+        <div class="media-tabs" role="tablist" aria-label="媒体类型"><button class="active" id="showVideoMedia" type="button" role="tab">视频</button><button id="showAudioMedia" type="button" role="tab">音频</button></div>
+        <button class="media-close" id="closeMediaPanel" type="button" aria-label="关闭媒体设置">×</button>
+      </div>
+      <section class="panel video-panel" id="videoPanel" aria-labelledby="videoTitle" hidden>
+        <div class="video-head">
+          <div><p id="videoTitle">粘贴链接后即可在此播放</p></div>
+          <div class="video-tools" aria-label="悬浮播放器控制"><button id="restoreVideo" type="button">恢复</button><button id="closeFloatingVideo" type="button">关闭</button></div>
+        </div>
+        <div class="video-controls">
+          <input id="youtubeUrl" name="youtube_url" type="url" inputmode="url" aria-label="YouTube 视频链接" placeholder="粘贴 YouTube 链接，例如 https://youtu.be/…" autocomplete="url">
+          <button class="btn primary" id="playYoutube" type="button">播放视频</button>
+          <button class="btn" id="detectYoutube" type="button">从笔记识别</button>
+          <button class="btn danger" id="removeVideo" type="button">删除</button>
+        </div>
+        <div class="video-empty" id="videoEmpty">粘贴 YouTube 链接即可播放。</div>
+        <div id="videoPlayer" hidden>
+          <div class="video-frame"><iframe id="youtubeFrame" title="YouTube 视频播放器" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>
+          <a class="video-link" id="openYoutube" target="_blank" rel="noopener noreferrer">在 YouTube 中打开</a>
+        </div>
+      </section>
+      <section class="panel audio-panel" id="audioPanel" aria-labelledby="audioTitle" hidden>
+        <div class="video-head"><div><p id="audioTitle">音频</p><span class="small">链接随文本保存；本地文件仅供预览。</span></div><div class="audio-float-tools"><button id="restoreAudio" type="button">返回原位</button><button id="closeFloatingAudio" type="button">关闭</button></div></div>
+        <div class="audio-controls">
+          <input id="audioUrl" name="audio_url" type="url" inputmode="url" aria-label="音频链接" placeholder="粘贴音频直链或 NHK Easy 文章链接…" autocomplete="url">
+          <button class="btn primary" id="playAudioUrl" type="button">嵌入链接</button>
+          <label class="btn audio-file-label">上传音频文件<input id="audioFile" name="audio_file" type="file" accept="audio/*" hidden></label>
+          <button class="btn danger" id="removeAudio" type="button">删除</button>
+        </div>
+        <div class="audio-empty" id="audioEmpty">粘贴音频链接或上传文件。</div>
+        <div class="review-box" id="nhkPagePlayer" hidden><strong>NHK 原网页播放</strong><p>音频由 NHK 自己的播放器提供，将在独立小窗口中打开。</p><button class="btn primary" id="openNhkPagePlayer" type="button">打开 NHK 播放窗口</button></div>
+        <audio id="audioPlayer" controls preload="metadata" hidden></audio>
+        <div class="audio-transport" id="audioTransport" hidden>
+          <button class="btn" id="audioBack" type="button">- 5s</button>
+          <button class="btn" id="audioForward" type="button">+ 5s</button>
+        </div>
+        <a class="video-link" id="openAudio" target="_blank" rel="noopener noreferrer" hidden>在新窗口打开音频</a>
+      </section>
+      <div class="editor-stage" id="editorStage">
+        <article class="panel editor is-blank" id="editor" data-placeholder="新建文本后开始记录。">
+          <div class="editor-mount" id="editorMount"></div>
+          <div class="new-text-prompt" id="newTextPrompt"><strong>开始一篇文本</strong>记录内容，并将选中的词句保存为词卡。<br><button class="btn primary" type="button" id="newTextBtn">＋ 新建文本</button></div>
+        </article>
+        <aside class="language-assistant" id="languageAssistant" aria-labelledby="languageAssistantTitle" hidden>
+          <header><div><h2 id="languageAssistantTitle">语言助手</h2><p>基于当前选区解释用法。</p></div><button id="closeLanguageAssistant" type="button" aria-label="关闭语言助手">×</button></header>
+          <div class="assistant-selection" id="assistantSelection">先在正文中选择词语或句子。</div>
+          <div class="assistant-actions"><button class="btn primary" id="analyzeSelection" type="button">解释选区</button><button class="btn" id="capturePhrase" type="button">提取词伙</button></div>
+          <div class="assistant-result" id="assistantResult" role="status" aria-live="polite"><p>翻译、语法和用法会显示在这里。</p></div>
+          <section class="captured-phrases"><h3>本文词伙</h3><div id="capturedPhraseList"><p>还没有提取词伙。</p></div></section>
+        </aside>
+      </div>
+      </div>
+      <section class="archive-view" id="archiveView" hidden aria-label="历史全文">
+        <div class="panel archive-toolbar" id="archiveListHeader">
+          <div class="archive-heading">
+            <div><h2>历史全文 <span class="count" id="archiveTotalCount">0</span></h2><p>单击查看详情；双击正文阅读，双击标题重命名。</p></div>
+            <div class="archive-heading-actions"><button class="btn" id="refreshArchives" type="button">刷新</button><button class="btn primary" id="archiveNewTextBtn" type="button">新建文本</button></div>
+          </div>
+          <div class="archive-filters">
+            <label class="sr-only" for="archiveSearch">搜索历史全文</label><input id="archiveSearch" name="archive_search" type="search" placeholder="搜索标题、正文、标注或备注…" autocomplete="off">
+            <label class="sr-only" for="archiveLanguageFilter">历史全文语言</label><select id="archiveLanguageFilter" name="archive_language"><option value="all">全部语言</option><option value="en">英语</option><option value="nl">荷兰语</option><option value="ja">日语</option></select>
+            <label class="sr-only" for="archiveSort">历史全文排序</label><select id="archiveSort" name="archive_sort" aria-label="历史全文排序"><option value="updated">最近更新</option><option value="date">学习日期</option><option value="title">名称</option><option value="language">语言</option></select>
+            <button class="btn" id="archiveClearFilters" type="button">清除筛选</button>
+          </div>
+          <div class="archive-switches">
+            <div class="archive-scopes" role="group" aria-label="历史全文范围"><button type="button" data-archive-scope="all" aria-pressed="true">全部</button><button type="button" data-archive-scope="recent" aria-pressed="false">最近更新</button><button type="button" data-archive-scope="trash" aria-pressed="false">回收站</button></div>
+            <div class="archive-layouts" role="group" aria-label="历史全文布局"><button type="button" data-archive-layout="list" aria-pressed="true">列表</button><button type="button" data-archive-layout="grid" aria-pressed="false">网格</button></div>
+          </div>
+          <p id="archiveScopeHelp">全文与独立词卡分开管理。</p>
+          <div class="archive-selection-bar"><label><input id="archiveSelectAll" type="checkbox"> 全选当前结果</label><span id="archiveSelectionCount">已选 0 项</span><button class="btn" id="archiveExportSelected" type="button" disabled>下载全文备份</button><button class="btn danger" id="archiveDeleteSelected" type="button" disabled>移入回收站</button></div>
+          <p id="archiveOperationStatus" role="status" aria-live="polite" hidden></p>
+        </div>
+        <div class="archive-manager" id="archiveManager">
+          <div class="panel archive-dates" id="archiveDates" aria-label="历史全文列表"></div>
+          <aside class="archive-details" id="archiveDetails" aria-label="全文详情" tabindex="-1" hidden>
+            <div class="archive-details-head"><h3>全文详情</h3><button class="btn" id="archiveDetailsClose" type="button" aria-label="关闭全文详情">关闭</button></div>
+            <div id="archiveDetailsContent"></div>
+          </aside>
+        </div>
+        <article class="panel archive-reader" id="archiveReader" hidden aria-label="历史全文阅读器"></article>
+      </section>
+      <section class="settings-view" id="settingsView" hidden aria-label="设置">
+        <article class="panel settings-page">
+          <h2>设置</h2>
+          <p>调整复习节奏、语音与连接配置。</p>
+          <section class="settings-group">
+            <h3>服务连接</h3>
+            <p>连接后，在不同设备继续使用已保存的内容。</p>
+            <div class="service-preset"><span>使用预设的云端与翻译服务</span><button class="btn primary" id="quickConnectServices" type="button">一键连接云端和 GPT</button></div>
+            <details class="sync-recovery"><summary>高级连接设置</summary><div class="settings-actions"><button class="btn" id="apiSettings" type="button">云端连接设置</button><button class="btn" id="gptSettings" type="button">翻译连接设置</button></div></details>
+          </section>
+          <section class="settings-group">
+            <h3>复习间隔</h3>
+            <p>每次记住后会进入下一轮间隔；忘记后回到第一轮。</p>
+            <div class="field">
+              <label for="intervalInput">间隔天数</label>
+              <input id="intervalInput" name="review_intervals" inputmode="numeric" autocomplete="off" placeholder="例如：1, 2, 4, 7, 15, 30, 60…">
+            </div>
+            <div class="interval-preview" id="intervalPreview"></div>
+          </section>
+          <section class="settings-group">
+            <h3>音频速度</h3>
+            <p>应用于荷兰语与日语朗读。</p>
+            <div class="field">
+              <label for="audioSpeed">朗读速度</label>
+              <select id="audioSpeed" name="audio_speed">
+                <option value="0.7">慢速（0.7×）</option>
+                <option value="0.85">较慢（0.85×）</option>
+                <option value="1">正常（1.0×）</option>
+                <option value="1.15">较快（1.15×）</option>
+              </select>
+            </div>
+          </section>
+          <section class="settings-group" id="syncPanel" aria-label="同步">
+            <h3>同步</h3>
+            <p id="syncPanelStatus" role="status">正在读取本机内容…</p>
+            <p id="syncEpochWarning" role="alert" hidden>云端内容发生较大变化，部分修改已暂停同步。本机内容仍保留，请先下载备份，再确认要使用的版本。</p>
+            <div class="settings-actions"><button class="btn" id="syncPanelFlush" type="button">立即同步</button><button class="btn" id="exportSyncBackup" type="button">下载完整备份</button></div>
+            <div id="syncPanelDetails"></div>
+          </section>
+          <section class="settings-group">
+            <h3>文件备份</h3>
+            <p id="backupStatus">自动保留最近一份本地备份。</p>
+            <p id="backupRestoreHelp">读取备份后，由你确认要使用的内容，不会自动覆盖现有内容或正在编辑的草稿。原文件也会保留。</p>
+            <label for="backupFile">选择备份文件</label><input id="backupFile" type="file" accept="application/json,.json" aria-describedby="backupRestoreHelp">
+            <div class="settings-actions"><button class="btn" id="downloadBackup" type="button">下载备份</button><button class="btn" id="restoreBackup" type="button">从文件恢复</button></div>
+            <p id="backupRestoreStatus" role="status" aria-live="polite"></p>
+          </section>
+          <div class="settings-actions">
+            <button class="btn" type="button" id="resetLearningSettings">恢复默认</button>
+            <button class="btn primary" type="button" id="saveLearningSettings">保存设置</button>
+          </div>
+        </article>
+      </section>
+      <section class="resources-view" id="resourcesView" hidden aria-label="Resource">
+        <article class="resource-page">
+          <div class="resource-head"><div><h2>待看清单</h2><p>收下想看的内容，在合适的时候开始。</p></div><div class="resource-head-actions"><button class="btn" id="syncResources" type="button">立即同步</button><button class="icon-btn resource-settings-trigger" id="openResourceSettings" type="button" aria-label="资源设置" title="资源设置"><span aria-hidden="true">⚙︎</span></button><button class="btn primary" id="addResource" type="button">添加资源</button></div></div>
+          <section class="resource-composer" id="resourceComposer" hidden>
+            <form class="resource-form" id="resourceForm">
+              <div class="resource-composer-head wide"><div><h3 id="resourceDialogTitle">新资源</h3><p>填入必要信息即可，之后随时可以编辑。</p></div><button class="resource-close" id="cancelResource" type="button" aria-label="关闭">×</button></div>
+              <input id="resourceEditId" name="resource_edit_id" type="hidden">
+              <input id="resourceEmojiValue" name="resource_emoji" type="hidden">
+              <fieldset class="resource-emoji-editor wide" id="resourceEmojiPicker">
+                <legend>图标</legend>
+                <div class="resource-emoji-current"><span id="resourceEmojiPreview" aria-hidden="true">🔖</span><p>选择一个 emoji</p></div>
+                <label class="emoji-search" for="resourceEmojiSearch"><span aria-hidden="true">⌕</span><span class="sr-only">搜索 emoji</span><input id="resourceEmojiSearch" name="resource_emoji_search" type="search" autocomplete="off" placeholder="搜索 emoji…"></label>
+                <div class="emoji-picker-section"><span id="resourceEmojiSectionLabel">最近使用</span></div>
+                <div class="emoji-grid" id="resourceEmojiGrid" aria-label="Emoji 列表"></div>
+                <nav class="emoji-categories" id="resourceEmojiCategories" aria-label="Emoji 分类"></nav>
+                <div class="emoji-picker-foot">
+                  <label class="emoji-custom" for="customResourceEmoji"><span class="sr-only">粘贴任意 emoji</span><input id="customResourceEmoji" name="custom_resource_emoji" maxlength="16" autocomplete="off" placeholder="粘贴 emoji…"></label>
+                  <button class="emoji-remove" id="removeResourceEmoji" type="button">使用默认图标</button>
+                </div>
+              </fieldset>
+              <div class="field wide"><label for="resourceName">名称</label><input id="resourceName" name="resource_name" required maxlength="300" autocomplete="off" placeholder="海街日记…"></div>
+              <div class="field wide"><label for="resourceUrl">链接（可选）</label><input id="resourceUrl" name="resource_url" type="url" inputmode="url" maxlength="2000" autocomplete="off" spellcheck="false" placeholder="https://example.com/…"></div>
+              <div class="field"><label for="resourceType">类型</label><select id="resourceType" name="resource_type"></select></div>
+              <div class="field"><label for="resourceLanguage">语言</label><select id="resourceLanguage" name="resource_language"></select></div>
+              <div class="field wide"><label for="resourceTopic">主题</label><input id="resourceTopic" name="resource_topic" maxlength="120" list="resourceTopicSuggestions" autocomplete="off" placeholder="日语学习网站…"><datalist id="resourceTopicSuggestions"></datalist></div>
+              <div class="field wide"><label for="resourceDescription">收藏理由</label><textarea id="resourceDescription" name="resource_description" maxlength="500" rows="3" autocomplete="off" placeholder="为什么想看？留下一句以后仍然有用的话…"></textarea></div>
+              <div class="resource-form-actions wide"><button class="btn" id="clearResourceForm" type="button">清空</button><button class="btn primary" type="submit">保存资源</button></div>
+            </form>
+          </section>
+          <div class="resource-tools">
+            <input id="resourceSearch" name="resource_search" type="search" aria-label="搜索资源" placeholder="搜索名称、主题或语言…" autocomplete="off">
+            <select id="resourceTopicFilter" name="resource_topic_filter" aria-label="主题筛选"><option value="all">全部主题</option></select>
+            <select id="resourceTypeFilter" name="resource_type_filter" aria-label="类型筛选"><option value="all">全部类型</option></select>
+          </div>
+          <div class="resource-summary" id="resourceSummary"></div>
+          <div class="resource-selection-bar" id="resourceSelectionBar" hidden><span id="resourceSelectionCount">已选 0 项</span><button class="btn" id="clearResourceSelection" type="button">取消选择</button><button class="btn danger" id="deleteSelectedResources" type="button">删除所选</button></div>
+          <div class="resource-section-title"><h3>待处理</h3></div><div class="resource-list" id="resourceActiveList"></div>
+          <div class="resource-section-title"><h3>已完成</h3><span class="small">完成后自动归档</span></div><div class="resource-list" id="resourceArchiveList"></div>
+        </article>
+      </section>
+      <section class="resources-view" id="resourceSettingsView" hidden aria-label="资源设置">
+        <article class="resource-page resource-settings-page">
+          <div class="resource-head"><div><button class="text-back" id="closeResourceSettings" type="button">← 返回待看清单</button><h2>资源设置</h2><p>语言和类型只用于资源库，不影响 Notebook。</p></div></div>
+          <div class="resource-settings-grid">
+            <section class="resource-config-section"><div><h3>语言标签</h3><p>添加、重命名或移除资源使用的语言。</p></div><form class="resource-config-add" id="addResourceLanguageForm"><label class="sr-only" for="newResourceLanguage">新语言</label><input id="newResourceLanguage" maxlength="40" placeholder="例如：한국어" required><button class="btn primary" type="submit">添加</button></form><div class="resource-config-list" id="resourceLanguageSettings"></div></section>
+            <section class="resource-config-section"><div><h3>资源分组</h3><p>编辑工作、学习和课余，也可以添加自己的分组。</p></div><form class="resource-config-add" id="addResourceGroupForm"><label class="sr-only" for="newResourceGroup">新分组</label><input id="newResourceGroup" maxlength="40" placeholder="例如：灵感库…" required autocomplete="off"><button class="btn primary" type="submit">添加</button></form><div class="resource-config-list" id="resourceGroupSettings"></div></section>
+            <section class="resource-config-section resource-type-section"><div><h3>资源类型</h3><p>每种类型归入一个资源分组。</p></div><form class="resource-config-add resource-type-add" id="addResourceTypeForm"><label class="sr-only" for="newResourceType">新类型</label><input id="newResourceType" maxlength="40" placeholder="例如：播客…" required autocomplete="off"><label class="sr-only" for="newResourceTypeGroup">分组</label><select id="newResourceTypeGroup" name="new_resource_type_group" aria-label="分组"></select><button class="btn primary" type="submit">添加</button></form><div class="resource-config-list" id="resourceTypeSettings"></div></section>
+          </div>
+        </article>
+      </section>
+      <section class="review-view" id="reviewView" hidden aria-label="词卡列表">
+        <article class="panel review-page">
+          <div class="archive-reader-head"><div><h2>词卡列表</h2><p id="reviewStep">搜索和管理词卡。</p></div><div class="review-page-actions"><button class="btn" id="exportCards" type="button">导出</button><button class="btn primary" id="addReviewCard" type="button">＋ 添加词卡</button></div></div>
+          <div class="review-list-toolbar">
+            <input id="reviewSearch" name="card_search" type="search" aria-label="搜索词卡" placeholder="搜索词卡、原句或释义…" autocomplete="off">
+            <select id="reviewLanguageFilter" name="review_language_filter" aria-label="复习语言筛选"><option value="all">全部语言</option><option value="en">英语</option><option value="nl">荷兰语</option><option value="ja">日语</option></select>
+          </div>
+          <div class="review-list" id="reviewList"></div>
+        </article>
+      </section>
+      <section class="daily-review-view" id="dailyReviewView" hidden aria-label="今日复习">
+        <article class="daily-review-page">
+          <div class="daily-review-head"><div><h2>今日复习</h2><p id="dailyReviewProgress" role="status" aria-live="polite">准备本次复习</p></div><div class="daily-review-tools"><label for="reviewExerciseMode">练习方式<select id="reviewExerciseMode" name="review_exercise_mode"><option value="card">词卡</option><option value="cloze">句子填空</option></select></label><label for="reviewBatchSize">每组数量<select id="reviewBatchSize" name="review_batch_size"><option value="10">10 张</option><option value="20">20 张</option><option value="30">30 张</option><option value="0">不限</option></select></label><button class="btn" id="exitDailyReview" type="button">退出复习</button></div></div>
+          <div class="daily-review-stage" id="dailyReviewStage"></div>
+        </article>
+      </section>
+      <section class="conversation-view" id="conversationView" hidden aria-label="口语陪练">
+        <div class="panel conversation-setup">
+          <label>语言<select id="chatLanguage" name="chat_language"><option value="en">英语</option><option value="nl">荷兰语</option><option value="ja">日语</option></select></label>
+          <label>交流方式<select id="chatMode" name="chat_mode"><option value="friend">日常聊天</option><option value="roleplay">场景角色扮演</option></select></label>
+          <label>场景（可选）<input id="chatScenario" name="chat_scenario" type="text" maxlength="120" autocomplete="off" placeholder="例如：聊聊最近的工作…"></label>
+          <label>纠错<select id="correctionMode" name="correction_mode"><option value="natural">自然交流</option><option value="strict">严格训练</option></select></label>
+        </div>
+        <div class="conversation-tabs" id="conversationTabs" role="tablist" aria-label="对话标签"></div>
+        <article class="panel conversation-shell">
+          <div class="conversation-head"><div><h2 id="chatTitle">准备好了，随时开始</h2><p id="chatSubtitle">像母语者一样交流，需要时再纠正。</p></div><div class="conversation-actions"><button class="btn chat-display-trigger" id="openChatDisplaySettings" type="button" aria-label="聊天显示设置">显示</button><button class="btn primary" id="saveConversation" type="button">保存全文</button></div></div>
+          <div class="chat-messages" id="chatMessages" aria-live="polite"></div>
+          <div class="starter-chips" id="starterChips"></div>
+          <div class="chat-composer">
+            <button class="btn record-btn" id="recordMessage" type="button" aria-label="录语音消息" title="录语音消息">🎙︎</button>
+            <textarea id="chatInput" name="chat_message" rows="2" aria-label="口语陪练消息" placeholder="输入内容，或录完一段语音再发送…" autocomplete="off"></textarea>
+            <button class="btn primary" id="sendChat" type="button">发送</button>
+            <div class="record-status" id="recordStatus">录音会由 Google 语音识别转成文字；发送前可以修改。</div>
+          </div>
+        </article>
+      </section>
+    </main>
+    <aside class="panel collection" id="flashcardPanel">
+      <div class="collection-head">
+        <h2>词卡 <span class="count" id="allNum">0</span></h2>
+        <button class="panel-toggle" id="collapseFlashcards" type="button" aria-controls="flashcardPanel" aria-expanded="true" aria-label="收起词卡侧栏" title="收起词卡侧栏"><span class="panel-toggle-icon" aria-hidden="true"></span></button>
+      </div>
+      <div class="card-tabs" aria-label="词卡语言筛选">
+        <button type="button" class="active" data-card-language="nl">荷兰语</button>
+        <button type="button" data-card-language="en">英语</button>
+        <button type="button" data-card-language="ja">日语</button>
+      </div>
+      <div class="review-box">
+        <strong id="reviewTitle">今日无需复习</strong>
+        <p id="reviewHint">按间隔安排下次复习。</p>
+        <div class="review-mode">
+          <label><input type="radio" name="reviewMode" value="separate" checked> 按语言复习</label>
+          <label><input type="radio" name="reviewMode" value="mixed"> 一起复习</label>
+        </div>
+        <button class="btn primary start-review" id="startReview" type="button">开始复习</button>
+      </div>
+      <div class="items" id="collectionList"></div>
+    </aside>
+    <button class="panel-restore" id="restoreFlashcards" type="button" aria-controls="flashcardPanel" aria-expanded="false" aria-label="展开词卡侧栏" title="展开词卡侧栏" hidden><span class="panel-toggle-icon" aria-hidden="true"></span><span class="sr-only">展开词卡侧栏</span></button>
+  </div>
+</div>
+
+<button class="chat-selection-action" id="addChatSelection" type="button" hidden>＋ 加入词卡</button>
+
+<!-- 选中弹出菜单 -->
+<div class="selection-pop" id="selectionPop">
+  <button class="word" id="addJapaneseReading" type="button" hidden>＋ 添加读音</button>
+  <button class="word" id="speakSelection" type="button">朗读</button>
+  <button class="gpt" id="openLanguageAssistant" type="button">解释</button>
+  <button class="phrase" id="addInlineComment" type="button">批注</button>
+  <button class="phrase" id="quickCapturePhrase" type="button">词伙</button>
+  <button class="word" id="translateBtn" type="button">制卡</button>
+  <button class="cancel" id="closePop" type="button" aria-label="关闭选中菜单">×</button>
+</div>
+
+<div class="toast-region" id="toastRegion" role="status" aria-live="polite" aria-atomic="true"></div>
+
+<dialog id="confirmDialog" class="confirm-dialog">
+  <form method="dialog" class="dialog-inner">
+    <h2 id="confirmTitle">确认操作</h2>
+    <p id="confirmMessage"></p>
+    <div class="dialog-actions">
+      <button class="btn" type="button" id="confirmCancel">取消</button>
+      <button class="btn danger" type="button" id="confirmAccept">确认</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="inlineCommentDialog">
+  <form method="dialog" class="dialog-inner">
+    <h2>添加批注</h2>
+    <p id="inlineCommentSelection"></p>
+    <div class="field"><label for="inlineCommentText">批注内容</label><textarea id="inlineCommentText" rows="3" maxlength="500" placeholder="写下语法、语境或记忆提示…"></textarea></div>
+    <div class="dialog-actions"><button class="btn" value="cancel">取消</button><button class="btn primary" id="saveInlineComment" value="default">保存批注</button></div>
+  </form>
+</dialog>
+
+<dialog id="resourceDetailDialog" class="resource-detail-dialog">
+  <article class="resource-detail-card">
+    <header><span id="resourceDetailEmoji" class="resource-detail-emoji" aria-hidden="true"></span><button class="resource-close" id="closeResourceDetail" type="button" aria-label="关闭资源详情">×</button></header>
+    <h2 id="resourceDetailName"></h2>
+    <p id="resourceDetailDescription" class="resource-detail-description"></p>
+    <dl id="resourceDetailMeta" class="resource-detail-meta"></dl>
+    <div class="resource-detail-actions"><a class="btn" id="openResourceDetailLink" target="_blank" rel="noopener noreferrer">打开链接</a><button class="btn primary" id="editResourceDetail" type="button">编辑</button></div>
+  </article>
+</dialog>
+
+<!-- 添加卡片对话框 -->
+<dialog id="noteDialog">
+  <form method="dialog" class="dialog-inner">
+    <h2 id="dialogTitle">添加词卡</h2>
+    <p id="selectedText"></p>
+    <div id="gptResult" class="review-box" hidden></div>
+    <div class="field">
+      <label for="meaning" id="meaningLabel">中文释义（可选）</label>
+      <input id="meaning" name="card_meaning" placeholder="例如：尽管如此、总而言之…" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="note">备注（可选）</label>
+      <textarea id="note" name="card_note" rows="2" autocomplete="off" placeholder="语法、例句或记忆提示…"></textarea>
+    </div>
+    <div class="dialog-actions">
+      <button class="btn" value="cancel">取消</button>
+      <button class="btn primary" value="default" id="addItem">添加</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 复习页直接添加词卡 -->
+<dialog id="reviewCardDialog">
+  <form method="dialog" class="dialog-inner" id="reviewCardForm">
+    <h2 id="reviewCardDialogTitle">添加词卡</h2>
+    <p id="reviewCardDialogDescription">直接创建一张词卡，并安排到今日复习。</p>
+    <div class="field">
+      <label for="reviewCardLanguage">语言</label>
+      <select id="reviewCardLanguage" name="review_card_language"><option value="en">英语</option><option value="nl">荷兰语</option><option value="ja">日语</option></select>
+    </div>
+    <div class="field">
+      <label for="reviewCardText">词语或表达</label>
+      <input id="reviewCardText" name="review_card_text" required autocomplete="off" placeholder="例如：to get the ball rolling…">
+    </div>
+    <div class="field">
+      <label for="reviewCardSentence">完整原句（可选）</label>
+      <textarea id="reviewCardSentence" name="review_card_sentence" rows="2" autocomplete="off" placeholder="写下包含这个表达的完整句子…"></textarea>
+    </div>
+    <div class="field">
+      <label for="reviewCardMeaning">中文释义（可选）</label>
+      <input id="reviewCardMeaning" name="review_card_meaning" autocomplete="off" placeholder="例如：开始做某事…">
+    </div>
+    <div class="field">
+      <label for="reviewCardNote">备注（可选）</label>
+      <textarea id="reviewCardNote" name="review_card_note" rows="2" autocomplete="off" placeholder="用法、语域或记忆提示…"></textarea>
+    </div>
+    <div class="dialog-actions">
+      <button class="btn" value="cancel" type="button" id="cancelReviewCard">取消</button>
+      <button class="btn primary" value="default" type="submit" id="saveReviewCard">添加到今日复习</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 聊天显示设置 -->
+<dialog id="chatDisplayDialog">
+  <form method="dialog" class="dialog-inner">
+    <h2>聊天显示</h2>
+    <p>这些选项只影响聊天页面，并会保存在当前设备。</p>
+    <div class="chat-display-grid">
+      <div class="field">
+        <label>字体</label>
+        <div class="chat-font-options" id="chatFontOptions">
+          <button class="chat-font-option" type="button" data-chat-font="sans" style="font-family:Inter,sans-serif">现代</button>
+          <button class="chat-font-option" type="button" data-chat-font="serif" style="font-family:Georgia,serif">书本</button>
+          <button class="chat-font-option" type="button" data-chat-font="readable" style="font-family:Verdana,sans-serif">易读</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="chatFontSize">字号 <span id="chatFontSizeValue">16 px</span></label>
+        <div class="chat-size-row"><span>A</span><input id="chatFontSize" name="chat_font_size" type="range" min="17" max="24" step="1"><strong>A</strong></div>
+      </div>
+      <div class="field">
+        <label>文字对齐</label>
+        <div class="chat-setting-buttons" id="chatAlignOptions"><button type="button" data-chat-align="left">左对齐</button><button type="button" data-chat-align="center">居中</button></div>
+      </div>
+      <div class="field">
+        <label>对话宽度</label>
+        <div class="chat-setting-buttons" id="chatWidthOptions"><button type="button" data-chat-width="wide">宽</button><button type="button" data-chat-width="standard">标准</button><button type="button" data-chat-width="compact">紧凑</button></div>
+      </div>
+      <label class="switch-row"><span><strong>流式输出</strong><br><span class="small">回复逐字呈现</span></span><input id="chatStreaming" name="chat_streaming" type="checkbox" role="switch"></label>
+    </div>
+    <div class="dialog-actions"><button class="btn primary" value="default" type="submit">完成</button></div>
+  </form>
+</dialog>
+
+<!-- GPT 设置对话框 -->
+<dialog id="gptDialog">
+  <form method="dialog" class="dialog-inner">
+    <h2>连接 GPT 翻译</h2>
+    <p>填写你的安全服务端代理地址。该地址负责保管 OpenAI API Key；本页面不会存储或发送你的密钥。</p>
+    <div class="field">
+      <label for="proxyUrl">翻译代理地址</label>
+      <input id="proxyUrl" name="gpt_proxy_url" type="url" inputmode="url" spellcheck="false" placeholder="https://your-domain.com/api/translate…" autocomplete="url">
+    </div>
+    <p class="small">代理接收 POST JSON：<code>{ text, mode }</code>，返回 <code>{ english, chinese }</code>。</p>
+    <div class="dialog-actions">
+      <button class="btn" value="cancel">取消</button>
+      <button class="btn primary" value="default" id="saveGptSettings">保存设置</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 云端 API 设置对话框 -->
+<dialog id="apiDialog">
+  <form method="dialog" class="dialog-inner">
+    <h2>☁ 连接 Cloudflare 云端</h2>
+    <p>填入 Worker 地址后，所有卡片数据将自动同步到 D1 数据库。<br>认证令牌由 Worker 自动签发，无需手动输入。</p>
+    <div class="field">
+      <label for="apiBaseUrl">Worker API 地址</label>
+      <input id="apiBaseUrl" name="worker_api_url" type="url" inputmode="url" spellcheck="false" placeholder="https://your-worker.yefeizhou0086.workers.dev…" autocomplete="url">
+    </div>
+    <p class="small">怎么部署？看 <a href="https://github.com/" target="_blank">README</a>，或在 Cloudflare 控制台把 <code>D1 database</code> 绑定到 Worker。<br>你的 D1 数据库无独立密钥，访问边界仅由绑定到哪个 Worker 决定。</p>
+    <div class="dialog-actions">
+      <button class="btn" value="cancel">取消</button>
+      <button class="btn danger" value="disconnect" id="disconnectApi">断开连接</button>
+      <button class="btn primary" value="connect" id="connectApi">连接并同步</button>
+    </div>
+  </form>
+</dialog>
+
+<script type="module" src="assets/app.js"></script>
+</body>
+</html>
