@@ -255,111 +255,242 @@ Emoji 最近使用键：`notebook-resource-emojis`
 
 附件中写的是“无 Vite”，但当前工作区已经完成 Tiptap 前端迁移，并使用 Vite 7 打包。Resources 本次不应再引入 React/Vue/Next.js，也不应拆掉现有 Vite；应继续使用 Vanilla JS ES Modules + Vite，并保持 Cloudflare Worker/D1 架构。
 
-## 7. 建议的新数据模型
+## 7. 最终实现架构（本地完成，尚未部署）
 
-由于生产已采用通用同步对象表，建议不要立刻把 `resources` 主记录拆回多张普通表。更安全的增量方案是：
-
-1. 资源主记录继续作为 `sync_v2_objects(entity='resource')`。
-2. 新增同步实体类型需要先扩展 `entity` CHECK；或者把 Tag/Deck 定义放入 Resources settings，并把资源关联保存为稳定 ID 数组。
-3. 若使用独立关系表，则必须同时设计 sync v2 的变更传播，不能只更新 D1 表。
-
-推荐最终逻辑模型：
+实现采用规范化 D1 数据层，同时保留 `sync_v2_objects` 作为兼容投影：
 
 ```text
-resource.data:
-  id, name, type_id, language_id, status,
-  url, description, emoji, notes,
-  tag_ids[], deck_ids[], created_at, updated_at
+collection_resources
+  -> collection_types
+  -> collection_languages
+  <-> collection_tags through collection_resource_tags
+  <-> collection_decks through collection_deck_items
 
-settings/resources:
-  schema_version, languages[], types[], tags[], decks[]
+sync_v2_objects
+  -> 旧客户端与离线同步兼容投影
 ```
 
-如果生产同步 API 已支持通用 entity，优先把 `type`、`tag`、`deck` 作为独立实体；若不支持，则先采用版本化 settings + ID 数组，避免未经验证地改 CHECK 约束。
+新增表：
 
-## 8. 迁移映射（草案）
+- `app_schema_migrations`
+- `collection_runtime`
+- `collection_migration_source_objects`
+- `collection_migration_guards`
+- `collection_migration_issues`
+- `collection_languages`
+- `collection_types`
+- `collection_tags`
+- `collection_decks`
+- `collection_resources`
+- `collection_resource_tags`
+- `collection_deck_items`
+- `collection_legacy_groups`
+- `collection_legacy_type_groups`
 
-| 旧 Type | 新 Type | 附加 Tag | 处理方式 |
+运行模式：
+
+- `shadow`：规范化投影仅用于核对，前端仍读取兼容投影；写入双写。
+- `active`：验证后的正式模式，继续双写。
+- `retired`：紧急改读 `sync_v2_objects`；原子批量命令禁用。
+
+`0001`–`0003` 只会创建 `retired` runtime；精确 backfill 成功后才进入
+`shadow`，验证和受保护的 cutover 完成后才进入 `active`。
+
+Worker 新增：
+
+- `/api/session`
+- `/api/collections/state`
+- `/api/collections/operations`
+- `/api/collections/commands`
+- `/api/collections/verify`
+
+所有 API 都在 Cloudflare Access JWT 校验之后执行；不再接受共享 `API_SECRET`。
+
+## 8. 最终迁移映射
+
+迁移只在旧 ID 与名称都符合已知默认定义时自动映射：
+
+| 旧 ID / 名称 | 目标 Type | 附加 Tag | 结果 |
 |---|---|---|---|
-| project | 项目资料 | 无 | 自动 |
-| course | 课程 | 无 | 自动 |
-| website | 网站 / 工具 | 无 | 自动 |
-| movie_series | 影视 | 无 | 自动 |
-| variety | 影视 | 综艺 | 自动 |
-| book | 书籍 | 无 | 自动 |
-| magpie UUID | 待人工确认 | magpie | 逐资源检查 |
-| 五夏 UUID | 待人工确认 | 五夏 | 逐资源检查 |
-| type-ai-mtyu5daq | 待人工确认 | AI（如内容吻合） | 逐资源检查 |
-| type-家居-mux0vtcz | 待人工确认 | 家居（如内容吻合） | 逐资源检查 |
+| `project` / 项目资料 | 项目资料 | 无 | 自动 |
+| `course` / 课程 | 课程 | 无 | 自动 |
+| `website` / 学习网站 | 网站 / 工具 | 无 | 自动 |
+| `movie_series` / 电影 / 剧集 | 影视 | 无 | 自动 |
+| `book` / 书籍 | 书籍 | 无 | 自动 |
+| `variety` / 综艺 | 影视 | 综艺 | 自动 |
+| 任意 ID / 精确名称 `magpie` | 原 Type | magpie | 保留并列入人工复核 |
+| 任意 ID / 精确名称 `五夏` | 原 Type | 五夏 | 保留并列入人工复核 |
+| AI、家居或其他自定义 Type | 原 Type | 无 | 不猜测，列入人工复核 |
 
-未知类型不能强制映射为文章或书籍。
+默认 Type 会补齐：
 
-## 9. 可恢复迁移方案
+- 影视
+- 书籍
+- 文章
+- 音频
+- 课程
+- 网站 / 工具
+- 项目资料
+- 游戏
+- 其他
 
-正式迁移前必须：
+如果默认 ID 已被自定义名称占用，迁移会保留该自定义 Type，并为缺失默认 Type 创建新的稳定 ID；不会覆盖用户名称。迁移生成的 `综艺`、`magpie`、`五夏` Tag ID 由规范化名称哈希确定，重复 dry-run 得到相同 ID。
 
-1. 使用 D1 Time Travel 或导出方式生成可恢复备份点。
-2. 导出 `sync_v2_meta`、全部 `sync_v2_objects` 和 `sync_v2_ops`。
-3. 导出旧 `resources` 表用于差异核对，但不作为唯一源。
-4. 保存迁移前资源 ID、revision、JSON hash 与总数清单。
-5. 迁移脚本使用独立版本号和幂等 migration ledger。
-6. 先在测试数据库复制 39 条同步资源并运行迁移。
-7. 验证 39 个资源 ID、字段和状态完整，再更新前端。
-8. 保留旧字段和 Group 数据至少一个兼容版本。
-9. 新旧客户端并存期间，服务端拒绝低 schema version 覆盖新对象。
+迁移报告包含每个旧 Type 的 source、target、action 和 added tag。无法确定的资源不被强制改成文章、书籍或其他。
 
-回滚应恢复完整 sync v2 三表，而不仅是 `resources` 表。
+## 9. 数据安全与兼容实现
 
-## 10. 受影响文件清单
+- Resource ID、业务字段、创建时间和 tombstone 原样保留。
+- 迁移会为 settings 与每个 Resource 分配新的连续 revision，并同步推进全局
+  head；这样旧离线操作只能安全 rebase 或进入冲突，不能用旧 revision 覆盖新分类。
+- 迁移前后的 settings/resource JSON、revision 与 SHA-256 都写入迁移源表。
+- epoch/head、对象数量、任一 revision/deleted/data 不匹配都会触发约束失败并
+  原子回滚。
+- 相同版本不同 checksum 被拒绝。
+- 相同迁移重复运行不会重复创建多对多关联，也不会降低 `verified` 状态。
+- 规范化名称使用 NFKC、首尾空白移除、连续空白折叠和大小写规范化。
+- 数据库唯一索引与应用校验共同防止重复名称。
+- Tag/Deck 删除只删除或 tombstone 关联，不级联删除 Resource。
+- Type 删除必须提供目标 Type，服务端在同一原子命令中重新分配。
+- Tag 合并在同一命令中去重关联并 tombstone 源 Tag。
+- 兼容 settings/resource 投影在 backfill 中同步更新，防止旧客户端重新写回旧分类。
+- localStorage 不做全量清空；Collections 使用独立同步存储键并保留旧备份候选。
+- 已打开的 v1 标签页后续写入通过 `storage` 事件转为待确认恢复内容，不会静默覆盖 v2。
+- Worker 支持 `SYNC_READ_ONLY`、`COLLECTIONS_READ_ONLY` 和 runtime mode 回滚。
+- 生产 D1 artifact 不含显式 `BEGIN`/`COMMIT`，交由 Wrangler D1 migration 事务处理。
 
-确定需要修改：
+## 10. 最终变更文件
+
+前端：
 
 - `index.html`
 - `assets/app.js`
 - `assets/styles.css`
-- 最新生产 Worker 源码（当前工作区版本不是最新）
-- 新增版本化 D1 迁移文件
-- 新增迁移验证脚本/报告
+- `assets/sync-v2.js`
+
+Worker：
+
+- `worker.js`
+- `worker/collections.js`
+- `wrangler.jsonc.example`
+
+数据库与工具：
+
+- `migrations/0001_collections_migration_runtime.sql`
+- `migrations/0002_collections_schema.sql`
+- `migrations/0003_collections_indexes.sql`
+- `scripts/lib/collections-migration.mjs`
+- `scripts/migrate-collections.mjs`
+- `scripts/verify-collections.mjs`
+- `scripts/render-collections-mode.mjs`
+
+测试：
+
+- `tests/migration.test.mjs`
+- `tests/collections-worker.test.mjs`
+- `tests/sync-client.test.mjs`
+- `tests/fixtures/sync-v2-collections.json`
+
+文档与命令：
+
 - `CLOUDFLARE-SYNC-UPDATE.md`
+- `RESOURCES-PHASE-0-AUDIT.md`
+- `package.json`
+- `package-lock.json`
 
-可能需要修改：
+没有修改 Notebook 编辑器适配器、文档内容模型、翻译/朗读逻辑或 Flashcard 数据模型。
 
-- `package.json`（只增加验证脚本时；不增加框架）
-- `vite.config.js`（预计不需要）
+## 11. 已实现的产品行为
 
-不应修改：
+Collections 工作台：
 
-- `assets/editor-adapter.js`
-- Notebook 文档、翻译、朗读与 Flashcard 数据模型
+- 快速添加只要求 Title、Type 和 Status。
+- URL、Description、Language、Tags、Decks、Emoji 和旧 Topic 位于更多信息。
+- Type 直接选择，不再先选 Group。
+- Tag 可搜索、多选、移除和行内创建。
+- Deck 可搜索、多选，Resource 可以不属于任何 Deck。
+- 搜索覆盖标题、说明、旧 Topic、Type、Tag 与 Deck 名称。
+- Type、Language、Status、Tags、Deck 和 Deck 视图可组合筛选。
+- Tag 多选使用 OR；不同维度使用 AND。
+- 显示结果数、筛选 Chip、清空筛选与空状态。
+- 支持当前筛选结果全选和批量 Status、Type、Tag、Deck 操作。
 
-## 11. 下一阶段开始条件
+设置与管理：
 
-当前生产 Worker 已取得并完成初步审计，已确认：
+- Type、Tag、Language 默认只读展示，点击 Edit 后出现 Save/Cancel。
+- Tag 支持搜索、按名称/使用量排序、重命名、合并和安全删除。
+- Type 支持 Emoji、重命名、合并和带重新分配的安全删除。
+- Language 沿用稳定 ID；使用中的 Language 不允许直接删除。
+- Deck 支持名称、Emoji、说明、编辑和安全删除。
+- Deck 内继续使用相同搜索与筛选器。
 
-- `/api/sync/state` 与 `/api/sync/operations` 路由存在。
-- revision/head/epoch 采用乐观并发控制，并有最多 4 次重试。
-- `sync_v2_ops` 通过 `op_id`、请求 hash 与 guard 实现幂等。
-- `settings` 对象限制为 `id='resources'`。
-- 旧 cards/documents/resources/resource-settings API 在 sync v2 初始化后返回迁移提示，避免继续覆盖新数据。
-- 语言设置在同步层使用稳定的 `{id,name}` 对象。
+同步：
 
-现在可以进入 Phase 1：先扩展同步层数据规范与兼容读取，再实现独立 Type、Tags 和 Decks。正式 D1 写入仍需先准备备份与测试数据库。
-## 2026-11-23 前端同步基线合并记录
+- 原子 command 使用 opId、baseHead 和 epoch。
+- 离线普通编辑保留本机队列。
+- 已有云端基线后，离线批量命令保留 optimistic projection，并可在冲突后重试或明确放弃。
+- 首次完全离线、尚无服务器基线时，不执行破坏性合并/删除命令。
+- 同步冲突不会静默覆盖远端 tombstone 或新 schema。
 
-- 已从当前生产站点保存前端同步客户端快照：`assets/app.production-sync.js`。
-- 已保存独立同步引擎快照：`assets/sync-v2.production.js`，并作为本地 `assets/sync-v2.js` 使用。
-- 已将同步 v2 数据层接入本地 Tiptap 编辑器；没有退回旧 contenteditable 编辑器。
-- 已补齐同步版历史全文管理和同步处理面板所需的 HTML 节点。
-- 本地构建通过；浏览器验证编辑/阅读状态切换、Resources 同步投影和页面初始化均正常。
-- 线上 Worker 与 D1 尚未改写或部署；下一步才进入 Type 脱离 Group 的数据契约修改。
+## 12. 测试与验收结果
 
-## Phase 1 数据契约变更（尚未部署）
+自动化覆盖：
 
-- 同步设置升级为 `schema_version: 3`。
-- `types[]` 的新契约为 `{ id, name, emoji? }`；历史 `group` 字段允许保留，但不再必填或参与有效性校验。
-- 设置对象新增 `tags[]` 与 `decks[]`，现阶段默认空数组，使用稳定 ID 并进行规范化名称去重。
-- Resource 新增 `tag_ids[]` 与 `deck_ids[]` 兼容字段；服务端验证引用存在，旧资源不要求立即回填。
-- 删除仍被活动资源引用的 Type 继续返回引用冲突，避免资源失去有效类型。
-- 资源设置页已去掉 Group 编辑和 Type→Group 选择；旧 Groups 继续随同步设置保留，未删除生产数据。
-- 本阶段不迁移或重写现有资源 ID，也不自动处理 `magpie`、`五夏` 等需要人工判断的旧 Type。
+- 当前结果：52/52 tests passed；静态检查与构建通过
+- Cloudflare Access、Origin 拒绝和 read-only 模式
+- 规范化与兼容投影一致性
+- Type 安全删除、Tag 合并/删除、Deck 删除和批量修改
+- Resource ID、字段、关系与 tombstone 迁移
+- 默认 Type、精确旧 Type 映射和模糊分类保留
+- 幂等重跑、checksum/head/规范化 target ledger、逐对象内容防护和名称碰撞报告
+- D1 大 bind/statement 分块和精确 Deck position 验证
+- 本地备份导入、跨 scope 复制、离线队列和三方 settings 合并
+- 跨标签页 epoch 回执竞态、同 ID 恢复和终止性 4xx 冲突处理
+- retired 兼容读取
+
+浏览器回归覆盖：
+
+- Resource 新建、编辑、详情、筛选、空结果和 URL 状态
+- Tag 行内创建与多选
+- Deck 创建、编辑、导航、搜索和 Resource 关联
+- Type/Tag/Language Edit、Save、Cancel
+- Tag 合并、Tag/Deck 删除和 Type 重分配确认中的影响数量
+- 英文界面不翻译用户自定义 taxonomy 名称
+- 批量操作值不会在选择后被错误重置
+
+最终发布前仍必须在冻结的生产快照克隆和独立测试 D1 上执行迁移验证；本地 fixture 不能替代生产数据核对。
+
+## 13. 已知限制
+
+- 多语言 Resource 关联未实现；保留一个主要 Language。
+- Tag 多选第一版只支持 OR，不支持“匹配全部标签”。
+- Deck 手动排序、拖拽、复制、分享和导出不在本期。
+- Tag 合并与 Type 重分配当前通过精确目标名称确认；后续可换成可搜索选择器。
+- `retired` 模式禁用原子批量/合并命令；若在 retired 下重新开放写入，恢复 active 前需要新的重同步 migration。
+- `magpie`、`五夏` 和其他不明确 Type 仍需要生产迁移报告中的人工复核。
+- 没有在生产数据量上取得查询计划与性能指标；索引依据当前查询模式预置。
+
+## 14. 部署闸门与当前状态
+
+生产发布前必须：
+
+1. 设置 Cloudflare Access，并关闭 `workers.dev`。
+2. 同时开启两个只读开关。
+3. 创建 D1 Time Travel 恢复点与完整导出。
+4. 保存冻结后的 `/api/sync/raw-state`，并确认响应包含 `raw: true`。普通
+   `/api/sync/state` 会计算 Resource 的展示语言，不能作为可重放迁移源。
+5. 完成本地 clone dry-run、apply、重复运行和 verification。
+6. 在独立测试 D1 应用 `0001`–`0004`。
+7. 运行 `npm test`、`npm run check`、`npm run build`。
+8. 浏览器回归 Notebook、翻译、朗读、Flashcard 和 Collections。
+9. 人工批准后才允许生产 D1 migration 与 Worker deploy。
+10. verify 通过后生成并审查 guarded mode artifact；其 target ledger 必须核对
+    兼容投影、规范化 taxonomy、Resource、全部关联和精确 Deck position，才从
+    shadow 切换 active 并关闭只读。
+
+迁移生成器会把大 JSON bind 分块到 D1 上限以下，将 source/target ledger JSON
+存成独立的分块行，并将超长 SQL payload 拆成小于 95 KB 的语句；审查 artifact
+时不得手工合并这些片段。
+
+当前状态：代码与本地验证已完成；没有执行生产部署、生产 D1 migration、生产 mode 切换或生产数据删除。
 

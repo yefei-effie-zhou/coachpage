@@ -14,3 +14,7 @@ index.production-sync.html
 !.env.example
 .wrangler/
 *.log
+
+# Production backups and generated migration artifacts stay local.
+backups/
+generated/

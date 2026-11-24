@@ -1,0 +1,81 @@
+{
+  "protocol": 2,
+  "raw": true,
+  "epoch": "fixture-epoch",
+  "head": 5,
+  "objects": [
+    {
+      "entity": "settings",
+      "id": "resources",
+      "revision": 1,
+      "deleted": false,
+      "data": {
+        "id": "resources",
+        "schema_version": 4,
+        "languages": [
+          { "id": "lang-ja", "name": "日本語" }
+        ],
+        "groups": [
+          { "id": "legacy-study", "name": "学习" }
+        ],
+        "types": [
+          { "id": "movie", "name": "影视", "emoji": "🎬", "group": "legacy-study" },
+          { "id": "article", "name": "文章", "emoji": "📝" }
+        ],
+        "tags": [
+          { "id": "tag-japan", "name": "日本" },
+          { "id": "tag-writing", "name": "写作参考" }
+        ],
+        "decks": [
+          { "id": "deck-weekend", "name": "周末", "emoji": "📚", "description": "周末集中处理" }
+        ]
+      }
+    },
+    {
+      "entity": "resource",
+      "id": "resource-1",
+      "revision": 3,
+      "deleted": false,
+      "data": {
+        "id": "resource-1",
+        "name": "海街日记",
+        "url": "https://example.com/movie",
+        "type": "movie",
+        "language_id": "lang-ja",
+        "language": "日本語",
+        "topic": "电影",
+        "description": "周末观看",
+        "emoji": "🎬",
+        "tag_ids": ["tag-japan"],
+        "deck_ids": ["deck-weekend"],
+        "status": "backlog",
+        "completed_at": "",
+        "created_at": "2026-01-01T10:00:00.000Z",
+        "updated_at": "2026-01-02T10:00:00.000Z"
+      }
+    },
+    {
+      "entity": "resource",
+      "id": "resource-2",
+      "revision": 5,
+      "deleted": true,
+      "data": {
+        "id": "resource-2",
+        "name": "写作素材",
+        "url": "",
+        "type": "article",
+        "language_id": null,
+        "language": "不限语言",
+        "topic": "",
+        "description": "",
+        "emoji": "",
+        "tag_ids": ["tag-writing"],
+        "deck_ids": [],
+        "status": "completed",
+        "completed_at": "2026-02-02T10:00:00.000Z",
+        "created_at": "2026-02-01T10:00:00.000Z",
+        "updated_at": "2026-02-02T10:00:00.000Z"
+      }
+    }
+  ]
+}

@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f7f7f5" media="(prefers-color-scheme: light)" />
   <meta name="theme-color" content="#171a18" media="(prefers-color-scheme: dark)" />
   <title>Notebook - Language Workspace</title>
-  <link rel="stylesheet" href="assets/styles.css">
+  <link rel="stylesheet" href="assets/styles.css?v=collections-v6">
 </head>
 <body data-active-view="editor" data-ui-language="nl">
 <a class="skip-link" href="#mainContent">跳到主要内容</a>
@@ -15,8 +15,8 @@
     <div class="brand">
       <div class="mark" id="productMark" aria-hidden="true">📓</div>
       <nav class="product-switch" aria-label="Products" translate="no">
-        <button class="product-tab active" type="button" aria-pressed="true" data-product-view="notebook"><strong>Notebook</strong><span>Language workspace</span></button>
-        <button class="product-tab" type="button" aria-pressed="false" data-product-view="resources"><strong>Resources</strong><span>Saved for later</span></button>
+        <button class="product-tab active" type="button" aria-pressed="true" data-product-view="notebook"><strong>Notebook</strong></button>
+        <button class="product-tab" type="button" aria-pressed="false" data-product-view="resources"><strong>Resources <b class="product-count" id="resourceCount">0</b></strong></button>
       </nav>
     </div>
     <div class="header-actions">
@@ -61,36 +61,43 @@
     </aside>
     <main id="mainContent" tabindex="-1">
       <div class="workspace" id="workspace">
-      <section class="panel toolbar">
-        <input aria-label="文本标题" class="title-input" id="docTitle" name="document_title" autocomplete="off" value="荷兰语文本"/>
-        <button class="editor-mode-toggle is-editing" id="editorModeToggle" type="button" aria-label="当前为编辑模式，点击切换到阅读模式" title="切换到阅读模式">
-          <svg class="mode-icon mode-icon-edit" aria-hidden="true" viewBox="0 0 24 24">
-            <path d="M4.5 19.5h4l10-10a2.8 2.8 0 0 0-4-4l-10 10v4Z"/>
-            <path d="m13.5 6.5 4 4M4.5 15.5l4 4M4 7.5V4h6.5M20 13.5V20H12"/>
-          </svg>
-          <svg class="mode-icon mode-icon-read" aria-hidden="true" viewBox="0 0 24 24">
-            <path d="M6 3.5h8l4 4V13M14 3.5v4h4"/>
-            <path d="M11.5 18s2.4-3.2 5.5-3.2 5.5 3.2 5.5 3.2-2.4 3.2-5.5 3.2-5.5-3.2-5.5-3.2Z"/>
-            <circle cx="17" cy="18" r="1.25"/>
-            <path d="M10 20.5H6a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2"/>
-          </svg>
-        </button>
-        <details class="language-dropdown">
-          <summary><span id="editorLanguageLabel">荷兰语</span><span aria-hidden="true">⌄</span></summary>
-          <div class="language-checklist" role="group" aria-label="学习语言">
-            <label><input type="checkbox" name="document_language" value="nl" data-language="nl" checked><span>荷兰语</span></label>
-            <label><input type="checkbox" name="document_language" value="en" data-language="en"><span>英语</span></label>
-            <label><input type="checkbox" name="document_language" value="ja" data-language="ja"><span>日语</span></label>
+      <section class="panel toolbar document-header">
+        <div class="document-title-row">
+          <input aria-label="文本标题" class="title-input" id="docTitle" name="document_title" autocomplete="off" title="点击编辑标题" value="荷兰语文本"/>
+          <button class="editor-mode-toggle is-editing" id="editorModeToggle" type="button" aria-label="当前为编辑模式，点击切换到阅读模式" title="切换到阅读模式">
+            <svg class="mode-icon mode-icon-edit" aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M4.5 19.5h4l10-10a2.8 2.8 0 0 0-4-4l-10 10v4Z"/>
+              <path d="m13.5 6.5 4 4M4.5 15.5l4 4M4 7.5V4h6.5M20 13.5V20H12"/>
+            </svg>
+            <svg class="mode-icon mode-icon-read" aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M6 3.5h8l4 4V13M14 3.5v4h4"/>
+              <path d="M11.5 18s2.4-3.2 5.5-3.2 5.5 3.2 5.5 3.2-2.4 3.2-5.5 3.2-5.5-3.2-5.5-3.2Z"/>
+              <circle cx="17" cy="18" r="1.25"/>
+              <path d="M10 20.5H6a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2"/>
+            </svg>
+          </button>
+        </div>
+        <div class="document-meta-row">
+          <div class="document-meta-controls">
+            <details class="language-dropdown">
+              <summary class="document-meta-control"><span id="editorLanguageLabel">荷兰语</span><span aria-hidden="true">⌄</span></summary>
+              <div class="language-checklist" role="group" aria-label="学习语言">
+                <label><input type="checkbox" name="document_language" value="nl" data-language="nl" checked><span>荷兰语</span></label>
+                <label><input type="checkbox" name="document_language" value="en" data-language="en"><span>英语</span></label>
+                <label><input type="checkbox" name="document_language" value="ja" data-language="ja"><span>日语</span></label>
+              </div>
+            </details>
+            <input aria-label="学习日期" class="document-date document-meta-control" id="documentDate" name="document_date" type="date">
+            <button class="btn media-trigger document-meta-control" id="openMediaBtn" type="button">媒体</button>
           </div>
-        </details>
-        <input aria-label="学习日期" class="document-date" id="documentDate" name="document_date" type="date">
-        <div class="toolbar-actions"><button class="btn media-trigger" id="openMediaBtn" type="button">媒体</button><span class="status" id="saveStatus" role="status" aria-live="polite">点击新建开始编辑</span></div>
+          <span class="status" id="saveStatus" data-state="idle" role="status" aria-live="polite"><span class="local-save-dot" aria-hidden="true"></span><span class="save-status-copy">尚未保存</span></span>
+        </div>
       </section>
       <section class="editor-tools" id="editorTools" aria-label="文本编辑工具栏">
         <div class="editor-tool-row editor-tool-primary">
           <select class="tool-format-icon" data-editor-format aria-label="段落样式" title="段落样式"><option value="p">¶</option><option value="h2">H2</option><option value="h3">H3</option><option value="blockquote">❝</option></select>
-          <button type="button" data-editor-command="undo" aria-label="撤销" title="撤销">↶</button>
-          <button type="button" data-editor-command="redo" aria-label="重做" title="重做">↷</button>
+          <button type="button" data-editor-command="undo" aria-label="撤销" title="撤销"><svg class="editor-tool-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 7-4 4 4 4"/><path d="M5 11h7a6 6 0 0 1 6 6"/></svg></button>
+          <button type="button" data-editor-command="redo" aria-label="重做" title="重做"><svg class="editor-tool-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m15 7 4 4-4 4"/><path d="M19 11h-7a6 6 0 0 0-6 6"/></svg></button>
           <span class="tool-divider"></span>
           <button type="button" data-editor-command="bold" aria-label="粗体" title="粗体"><strong>B</strong></button>
           <details class="highlight-picker">
@@ -103,9 +110,9 @@
             </div>
           </details>
           <span class="tool-divider"></span>
-          <button type="button" data-editor-command="insertUnorderedList" aria-label="项目符号" title="项目符号"><span class="list-icon">•<i></i><i></i><i></i></span></button>
+          <button type="button" data-editor-command="insertUnorderedList" aria-label="项目符号" title="项目符号"><svg class="editor-tool-icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="5" cy="7" r="1" fill="currentColor" stroke="none"/><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="5" cy="17" r="1" fill="currentColor" stroke="none"/><path d="M9 7h10M9 12h10M9 17h10"/></svg></button>
           <details class="editor-more">
-            <summary aria-label="展开更多编辑工具" title="更多工具">•••</summary>
+            <summary aria-label="展开更多编辑工具" title="更多工具"><svg class="editor-tool-icon editor-tool-more-icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.35" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.35" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.35" fill="currentColor" stroke="none"/></svg></summary>
             <div class="editor-more-menu">
               <button type="button" data-editor-command="italic" aria-label="斜体" title="斜体"><em>I</em></button>
               <button type="button" data-editor-command="underline" aria-label="下划线" title="下划线"><u>U</u></button>
@@ -289,50 +296,70 @@
       </section>
       <section class="resources-view" id="resourcesView" hidden aria-label="Resource">
         <article class="resource-page">
-          <div class="resource-head"><div><h2>待看清单</h2><p>收下想看的内容，在合适的时候开始。</p></div><div class="resource-head-actions"><button class="btn" id="syncResources" type="button">立即同步</button><button class="icon-btn resource-settings-trigger" id="openResourceSettings" type="button" aria-label="资源设置" title="资源设置"><span aria-hidden="true">⚙︎</span></button><button class="btn primary" id="addResource" type="button">添加资源</button></div></div>
+          <div class="resource-head"><h2>收藏工作台</h2><div class="resource-head-actions"><button class="btn" id="syncResources" type="button">立即同步</button><button class="icon-btn resource-settings-trigger" id="openResourceSettings" type="button" aria-label="资源设置" title="资源设置"><span aria-hidden="true">⚙︎</span></button><button class="btn primary" id="addResource" type="button">添加资源</button></div></div>
+          <div class="resource-deck-workbench">
+            <nav class="resource-deck-nav" id="resourceDeckNav" aria-label="收藏册"><button type="button" class="active" data-resource-deck="" aria-pressed="true">全部项目</button></nav>
+            <button class="btn" id="manageResourceDecks" type="button">管理收藏册</button>
+          </div>
           <section class="resource-composer" id="resourceComposer" hidden>
             <form class="resource-form" id="resourceForm">
-              <div class="resource-composer-head wide"><div><h3 id="resourceDialogTitle">新资源</h3><p>填入必要信息即可，之后随时可以编辑。</p></div><button class="resource-close" id="cancelResource" type="button" aria-label="关闭">×</button></div>
+              <div class="resource-composer-head wide"><h3 id="resourceDialogTitle">新资源</h3><button class="resource-close" id="cancelResource" type="button" aria-label="关闭">×</button></div>
               <input id="resourceEditId" name="resource_edit_id" type="hidden">
               <input id="resourceEmojiValue" name="resource_emoji" type="hidden">
-              <fieldset class="resource-emoji-editor wide" id="resourceEmojiPicker">
-                <legend>图标</legend>
-                <div class="resource-emoji-current"><span id="resourceEmojiPreview" aria-hidden="true">🔖</span><p>选择一个 emoji</p></div>
-                <label class="emoji-search" for="resourceEmojiSearch"><span aria-hidden="true">⌕</span><span class="sr-only">搜索 emoji</span><input id="resourceEmojiSearch" name="resource_emoji_search" type="search" autocomplete="off" placeholder="搜索 emoji…"></label>
-                <div class="emoji-picker-section"><span id="resourceEmojiSectionLabel">最近使用</span></div>
-                <div class="emoji-grid" id="resourceEmojiGrid" aria-label="Emoji 列表"></div>
-                <nav class="emoji-categories" id="resourceEmojiCategories" aria-label="Emoji 分类"></nav>
-                <div class="emoji-picker-foot">
-                  <label class="emoji-custom" for="customResourceEmoji"><span class="sr-only">粘贴任意 emoji</span><input id="customResourceEmoji" name="custom_resource_emoji" maxlength="16" autocomplete="off" placeholder="粘贴 emoji…"></label>
-                  <button class="emoji-remove" id="removeResourceEmoji" type="button">使用默认图标</button>
-                </div>
-              </fieldset>
               <div class="field wide"><label for="resourceName">名称</label><input id="resourceName" name="resource_name" required maxlength="300" autocomplete="off" placeholder="海街日记…"></div>
-              <div class="field wide"><label for="resourceUrl">链接（可选）</label><input id="resourceUrl" name="resource_url" type="url" inputmode="url" maxlength="2000" autocomplete="off" spellcheck="false" placeholder="https://example.com/…"></div>
               <div class="field"><label for="resourceType">类型</label><select id="resourceType" name="resource_type"></select></div>
-              <div class="field"><label for="resourceLanguage">语言</label><select id="resourceLanguage" name="resource_language"></select></div>
-              <div class="field wide"><label for="resourceTopic">主题</label><input id="resourceTopic" name="resource_topic" maxlength="120" list="resourceTopicSuggestions" autocomplete="off" placeholder="日语学习网站…"><datalist id="resourceTopicSuggestions"></datalist></div>
-              <div class="field wide"><label for="resourceDescription">收藏理由</label><textarea id="resourceDescription" name="resource_description" maxlength="500" rows="3" autocomplete="off" placeholder="为什么想看？留下一句以后仍然有用的话…"></textarea></div>
+              <div class="field"><label for="resourceStatus">状态</label><select id="resourceStatus" name="resource_status"><option value="backlog">待处理</option><option value="active">进行中</option><option value="completed">已完成</option></select></div>
+              <details class="resource-advanced wide" id="resourceAdvanced">
+                <summary>更多信息</summary>
+                <div class="resource-advanced-grid">
+                  <div class="field wide"><label for="resourceUrl">链接（可选）</label><input id="resourceUrl" name="resource_url" type="url" inputmode="url" maxlength="2000" autocomplete="off" spellcheck="false" placeholder="https://example.com/…"></div>
+                  <div class="field"><label for="resourceLanguage">语言</label><select id="resourceLanguage" name="resource_language"></select></div>
+                  <div class="field"><label for="resourceTopic">旧主题（可选）</label><input id="resourceTopic" name="resource_topic" maxlength="120" list="resourceTopicSuggestions" autocomplete="off"><datalist id="resourceTopicSuggestions"></datalist></div>
+                  <fieldset class="resource-taxonomy-picker"><legend>标签</legend><label class="sr-only" for="resourceTagSearch">搜索标签</label><input id="resourceTagSearch" type="search" autocomplete="off" placeholder="搜索或选择标签…"><div class="resource-selected-chips" id="resourceTagSelection"></div><div class="resource-taxonomy-options" id="resourceTagOptions" aria-label="可选标签"></div></fieldset>
+                  <fieldset class="resource-taxonomy-picker"><legend>收藏册</legend><label class="sr-only" for="resourceDeckSearch">搜索收藏册</label><input id="resourceDeckSearch" type="search" autocomplete="off" placeholder="搜索收藏册…"><div class="resource-selected-chips" id="resourceDeckSelection"></div><div class="resource-taxonomy-options" id="resourceDeckOptions" aria-label="可选收藏册"></div></fieldset>
+                  <div class="field wide"><label for="resourceDescription">备注（可选）</label><textarea id="resourceDescription" name="resource_description" maxlength="500" rows="3" autocomplete="off"></textarea></div>
+                  <fieldset class="resource-emoji-editor wide" id="resourceEmojiPicker">
+                    <legend>图标</legend>
+                    <div class="resource-emoji-current"><span id="resourceEmojiPreview" aria-hidden="true">🔖</span></div>
+                    <label class="emoji-search" for="resourceEmojiSearch"><span aria-hidden="true">⌕</span><span class="sr-only">搜索 emoji</span><input id="resourceEmojiSearch" name="resource_emoji_search" type="search" autocomplete="off" placeholder="搜索 emoji…"></label>
+                    <div class="emoji-picker-section"><span id="resourceEmojiSectionLabel">最近使用</span></div>
+                    <div class="emoji-grid" id="resourceEmojiGrid" aria-label="Emoji 列表"></div>
+                    <nav class="emoji-categories" id="resourceEmojiCategories" aria-label="Emoji 分类"></nav>
+                    <div class="emoji-picker-foot">
+                      <label class="emoji-custom" for="customResourceEmoji"><span class="sr-only">粘贴任意 emoji</span><input id="customResourceEmoji" name="custom_resource_emoji" maxlength="16" autocomplete="off" placeholder="粘贴 emoji…"></label>
+                      <button class="emoji-remove" id="removeResourceEmoji" type="button">使用默认图标</button>
+                    </div>
+                  </fieldset>
+                </div>
+              </details>
               <div class="resource-form-actions wide"><button class="btn" id="clearResourceForm" type="button">清空</button><button class="btn primary" type="submit">保存资源</button></div>
             </form>
           </section>
-          <div class="resource-tools">
-            <input id="resourceSearch" name="resource_search" type="search" aria-label="搜索资源" placeholder="搜索名称、主题或语言…" autocomplete="off">
-            <select id="resourceTopicFilter" name="resource_topic_filter" aria-label="主题筛选"><option value="all">全部主题</option></select>
+          <div class="resource-tools resource-filter-grid">
+            <input id="resourceSearch" name="resource_search" type="search" aria-label="搜索资源" placeholder="搜索名称、说明或标签…" autocomplete="off">
             <select id="resourceTypeFilter" name="resource_type_filter" aria-label="类型筛选"><option value="all">全部类型</option></select>
+            <select id="resourceLanguageFilter" name="resource_language_filter" aria-label="语言筛选"><option value="all">全部语言</option></select>
+            <select id="resourceStatusFilter" name="resource_status_filter" aria-label="状态筛选"><option value="all">全部状态</option><option value="backlog">待处理</option><option value="active">进行中</option><option value="completed">已完成</option></select>
+            <select id="resourceTopicFilter" name="resource_topic_filter" aria-label="旧主题筛选"><option value="all">全部旧主题</option></select>
+            <details class="resource-facet"><summary id="resourceTagFilterLabel">标签</summary><div class="resource-facet-options" id="resourceTagFilter" role="group" aria-labelledby="resourceTagFilterLabel"></div></details>
+            <details class="resource-facet"><summary id="resourceDeckFilterLabel">收藏册</summary><div class="resource-facet-options" id="resourceDeckFilter" role="group" aria-labelledby="resourceDeckFilterLabel"></div></details>
+            <select id="resourceSort" name="resource_sort" aria-label="资源排序"><option value="updated">最近更新</option><option value="created">最近添加</option><option value="name">名称</option><option value="completed">完成日期</option></select>
           </div>
+          <div class="resource-filter-state"><div class="resource-filter-chips" id="resourceFilterChips"></div><button class="btn" id="clearResourceFilters" type="button" hidden>清空筛选</button></div>
+          <p class="sr-only" id="resourceResultsStatus" role="status" aria-live="polite"></p>
           <div class="resource-summary" id="resourceSummary"></div>
-          <div class="resource-selection-bar" id="resourceSelectionBar" hidden><span id="resourceSelectionCount">已选 0 项</span><button class="btn" id="clearResourceSelection" type="button">取消选择</button><button class="btn danger" id="deleteSelectedResources" type="button">删除所选</button></div>
-          <div class="resource-section-title"><h3>待处理</h3></div><div class="resource-list" id="resourceActiveList"></div>
-          <div class="resource-section-title"><h3>已完成</h3><span class="small">完成后自动归档</span></div><div class="resource-list" id="resourceArchiveList"></div>
+          <div class="resource-selection-bar" id="resourceSelectionBar"><label><input id="resourceSelectAll" type="checkbox"> 全选当前筛选结果</label><span id="resourceSelectionCount">已选 0 项</span><select id="resourceBatchAction" aria-label="批量操作"><option value="">选择批量操作</option><option value="status">修改状态</option><option value="type">修改类型</option><option value="add_tags">添加标签</option><option value="remove_tags">移除标签</option><option value="add_decks">加入收藏册</option><option value="remove_decks">移出收藏册</option></select><select id="resourceBatchValue" aria-label="批量操作值" hidden></select><button class="btn primary" id="applyResourceBatchAction" type="button" disabled>应用</button><button class="btn" id="clearResourceSelection" type="button" disabled>取消选择</button><button class="btn danger" id="deleteSelectedResources" type="button" disabled>删除所选</button></div>
+          <div class="resource-section-title"><h3>待处理 <span class="count" id="resourceActiveCount">0</span></h3></div><div class="resource-list" id="resourceActiveList"></div>
+          <div class="resource-section-title"><h3>已完成 <span class="count" id="resourceCompletedCount">0</span></h3></div><div class="resource-list" id="resourceArchiveList"></div>
         </article>
       </section>
       <section class="resources-view" id="resourceSettingsView" hidden aria-label="资源设置">
         <article class="resource-page resource-settings-page">
-          <div class="resource-head"><div><button class="text-back" id="closeResourceSettings" type="button">← 返回待看清单</button><h2>资源设置</h2><p>语言和类型独立管理；旧分组仅保留为迁移资料。</p></div></div>
+          <div class="resource-head"><div><button class="text-back" id="closeResourceSettings" type="button">← 返回</button><h2>资源设置</h2></div></div>
           <div class="resource-settings-grid">
-            <section class="resource-config-section"><div><h3>语言标签</h3><p>添加、重命名或移除资源使用的语言。</p></div><form class="resource-config-add" id="addResourceLanguageForm"><label class="sr-only" for="newResourceLanguage">新语言</label><input id="newResourceLanguage" maxlength="40" placeholder="例如：한국어" required><button class="btn primary" type="submit">添加</button></form><div class="resource-config-list" id="resourceLanguageSettings"></div></section>
-            <section class="resource-config-section resource-type-section"><div><h3>资源类型</h3><p>Type 表示内容形式，不再依赖资源分组。</p></div><form class="resource-config-add resource-type-add" id="addResourceTypeForm"><label class="sr-only" for="newResourceTypeEmoji">类型图标</label><input id="newResourceTypeEmoji" class="resource-type-emoji" maxlength="16" placeholder="📌" autocomplete="off"><label class="sr-only" for="newResourceType">新类型</label><input id="newResourceType" maxlength="40" placeholder="例如：播客…" required autocomplete="off"><button class="btn primary" type="submit">添加</button></form><div class="resource-config-list" id="resourceTypeSettings"></div></section>
+            <section class="resource-config-section resource-type-section"><div><h3>资源类型</h3></div><form class="resource-config-add resource-type-add" id="addResourceTypeForm"><label class="sr-only" for="newResourceTypeEmoji">类型图标</label><input id="newResourceTypeEmoji" class="resource-type-emoji" maxlength="16" placeholder="📌" autocomplete="off"><label class="sr-only" for="newResourceType">新类型</label><input id="newResourceType" maxlength="40" placeholder="类型名称" required autocomplete="off"><button class="btn primary" type="submit">添加</button></form><div class="resource-config-list" id="resourceTypeSettings"></div></section>
+            <section class="resource-config-section resource-tag-section"><div><h3>标签</h3></div><form class="resource-config-add resource-type-add" id="addResourceTagForm"><label class="sr-only" for="newResourceTagEmoji">标签图标</label><input id="newResourceTagEmoji" class="resource-type-emoji" maxlength="16" placeholder="🏷️" autocomplete="off"><label class="sr-only" for="newResourceTag">新标签</label><input id="newResourceTag" maxlength="40" placeholder="标签名称" required autocomplete="off"><button class="btn primary" type="submit">添加</button></form><div class="resource-config-toolbar"><input id="resourceTagSettingsSearch" type="search" placeholder="搜索标签…" aria-label="搜索标签"><select id="resourceTagSettingsSort" aria-label="标签排序"><option value="name">按名称</option><option value="count-desc">使用最多</option><option value="count-asc">使用最少</option></select></div><div class="resource-config-list" id="resourceTagSettings"></div></section>
+            <section class="resource-config-section"><div><h3>语言</h3></div><form class="resource-config-add" id="addResourceLanguageForm"><label class="sr-only" for="newResourceLanguage">新语言</label><input id="newResourceLanguage" maxlength="40" placeholder="语言名称" required><button class="btn primary" type="submit">添加</button></form><div class="resource-config-list" id="resourceLanguageSettings"></div></section>
           </div>
         </article>
       </section>
@@ -433,13 +460,26 @@
   </form>
 </dialog>
 
-<dialog id="resourceDetailDialog" class="resource-detail-dialog">
+<dialog id="resourceDetailDialog" class="resource-detail-dialog" aria-labelledby="resourceDetailName">
   <article class="resource-detail-card">
     <header><span id="resourceDetailEmoji" class="resource-detail-emoji" aria-hidden="true"></span><button class="resource-close" id="closeResourceDetail" type="button" aria-label="关闭资源详情">×</button></header>
     <h2 id="resourceDetailName"></h2>
     <p id="resourceDetailDescription" class="resource-detail-description"></p>
     <dl id="resourceDetailMeta" class="resource-detail-meta"></dl>
-    <div class="resource-detail-actions"><a class="btn" id="openResourceDetailLink" target="_blank" rel="noopener noreferrer">打开链接</a><button class="btn primary" id="editResourceDetail" type="button">编辑</button></div>
+    <div class="resource-detail-actions"><a class="btn" id="openResourceDetailLink" target="_blank" rel="noopener noreferrer">打开链接</a><button class="btn danger" id="deleteResourceDetail" type="button">删除</button><button class="btn primary" id="editResourceDetail" type="button">编辑</button></div>
+  </article>
+</dialog>
+
+<dialog id="resourceDeckDialog" class="resource-detail-dialog" aria-labelledby="resourceDeckDialogTitle">
+  <article class="resource-detail-card resource-deck-manager">
+    <header><h2 id="resourceDeckDialogTitle">收藏册</h2><button class="resource-close" id="closeResourceDecks" type="button" aria-label="关闭收藏册管理">×</button></header>
+    <form class="resource-config-add resource-deck-add" id="addResourceDeckForm">
+      <label class="sr-only" for="newResourceDeckEmoji">收藏册图标</label><input id="newResourceDeckEmoji" class="resource-type-emoji" maxlength="16" placeholder="📚" autocomplete="off">
+      <label class="sr-only" for="newResourceDeck">新收藏册</label><input id="newResourceDeck" maxlength="80" placeholder="收藏册名称" required autocomplete="off">
+      <label class="sr-only" for="newResourceDeckDescription">收藏册说明</label><input id="newResourceDeckDescription" maxlength="500" placeholder="说明（可选）" autocomplete="off">
+      <button class="btn primary" type="submit">创建</button>
+    </form>
+    <div class="resource-config-list" id="resourceDeckSettings"></div>
   </article>
 </dialog>
 
@@ -549,12 +589,12 @@
 <dialog id="apiDialog">
   <form method="dialog" class="dialog-inner">
     <h2>☁ 连接 Cloudflare 云端</h2>
-    <p>填入 Worker 地址后，所有卡片数据将自动同步到 D1 数据库。<br>认证令牌由 Worker 自动签发，无需手动输入。</p>
+    <p>填入 Worker 地址后，内容会同步到 D1 数据库。请先在该地址完成 Cloudflare Access 登录；浏览器不会保存服务器主密钥。</p>
     <div class="field">
       <label for="apiBaseUrl">Worker API 地址</label>
       <input id="apiBaseUrl" name="worker_api_url" type="url" inputmode="url" spellcheck="false" placeholder="https://your-worker.yefeizhou0086.workers.dev…" autocomplete="url">
     </div>
-    <p class="small">怎么部署？看 <a href="https://github.com/" target="_blank">README</a>，或在 Cloudflare 控制台把 <code>D1 database</code> 绑定到 Worker。<br>你的 D1 数据库无独立密钥，访问边界仅由绑定到哪个 Worker 决定。</p>
+    <p class="small">部署时需要绑定 D1，并为 Worker 路由启用 Cloudflare Access。生产环境应关闭未受 Access 保护的 <code>workers.dev</code> 入口。</p>
     <div class="dialog-actions">
       <button class="btn" value="cancel">取消</button>
       <button class="btn danger" value="disconnect" id="disconnectApi">断开连接</button>
@@ -563,6 +603,6 @@
   </form>
 </dialog>
 
-<script type="module" src="assets/app.js"></script>
+<script type="module" src="assets/app.js?v=collections-v6"></script>
 </body>
 </html>

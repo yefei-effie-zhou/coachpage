@@ -1,3 +1,16 @@
+import {
+  CollectionError,
+  canonicalCollectionsSnapshot,
+  collectionJsonPayloads,
+  collectionSettingsStatements,
+  collectionResourceStatements,
+  collectionResourcesStatements,
+  collectionStatementsForSyncOperation,
+  getCollectionsRuntime,
+  normalizeCollectionName,
+  verifyCollectionsProjection,
+} from "./worker/collections.js";
+
 // ============================================================
 // Dutch Notebook · Cloudflare Worker API
 // ============================================================
@@ -19,7 +32,7 @@ function corsHeaders(origin, allowedOrigin) {
     "Access-Control-Allow-Origin": allowedOrigin,
     "Access-Control-Allow-Credentials": "true",
     "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, X-API-Secret, Authorization, X-Audio-Filename, Range",
+    "Access-Control-Allow-Headers": "Content-Type, X-Audio-Filename, Range",
     "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, ETag",
     "Content-Type": "application/json; charset=utf-8",
     "Vary": "Origin",
@@ -48,19 +61,111 @@ function parseModelJson(rawValue) {
   return { raw, value: null };
 }
 
-// ── 鉴权 ──────────────────────────────────────────────
-function authOK(request, env, token) {
-  if (!env.API_SECRET) return true;
-  if (!token) return false;
-  return token === env.API_SECRET;
+// ── Cloudflare Access 鉴权 ────────────────────────────
+// Access policy protects the route at the edge; the Worker still validates the
+// signed assertion so a workers.dev route or forged identity header cannot
+// bypass the policy. Public keys are cached per isolate for a short period.
+const accessKeyCache = new Map();
+
+class AccessError extends Error {
+  constructor(status, code, message) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
 }
 
-function extractToken(request) {
-  const xSecret = request.headers.get("X-API-Secret");
-  if (xSecret) return xSecret;
-  const authz = request.headers.get("Authorization") || "";
-  const m = authz.match(/^Bearer\s+(.+)$/i);
-  return m ? m[1] : null;
+function accessBase64Url(value) {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const binary = atob(normalized + "=".repeat((4 - normalized.length % 4) % 4));
+  return Uint8Array.from(binary, character => character.charCodeAt(0));
+}
+
+function accessJson(value, field) {
+  try {
+    return JSON.parse(new TextDecoder().decode(accessBase64Url(value)));
+  } catch {
+    throw new AccessError(401, "access_invalid", `Cloudflare Access ${field} 无效。`);
+  }
+}
+
+function accessIssuer(env) {
+  const raw = String(env.ACCESS_ISSUER || env.ACCESS_TEAM_DOMAIN || "").trim().replace(/\/+$/, "");
+  const value = raw && !/^https?:\/\//i.test(raw) ? `https://${raw}` : raw;
+  let url;
+  try { url = new URL(value); } catch {
+    throw new AccessError(503, "access_not_configured", "Worker 尚未正确设置 ACCESS_ISSUER。");
+  }
+  if (url.protocol !== "https:" || url.pathname !== "/") {
+    throw new AccessError(503, "access_not_configured", "ACCESS_ISSUER 必须是 HTTPS 根地址。");
+  }
+  return url.origin;
+}
+
+function accessConfig(env) {
+  const issuer = accessIssuer(env);
+  const audiences = String(env.ACCESS_AUD || "").split(",").map(value => value.trim()).filter(Boolean);
+  const allowedEmails = new Set(String(env.ACCESS_ALLOWED_EMAILS || "").split(",")
+    .map(value => value.trim().toLocaleLowerCase("en-US")).filter(Boolean));
+  if (!audiences.length || !allowedEmails.size) {
+    throw new AccessError(503, "access_not_configured", "Worker 必须设置 ACCESS_AUD 和 ACCESS_ALLOWED_EMAILS。");
+  }
+  return { issuer, audiences, allowedEmails };
+}
+
+async function accessPublicKey(issuer, kid) {
+  const cacheKey = `${issuer}\n${kid}`;
+  const cached = accessKeyCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.key;
+  let response;
+  try {
+    response = await fetch(`${issuer}/cdn-cgi/access/certs`, { headers: { Accept: "application/json" } });
+  } catch {
+    throw new AccessError(503, "access_keys_unavailable", "暂时无法读取 Cloudflare Access 公钥。");
+  }
+  if (!response.ok) throw new AccessError(503, "access_keys_unavailable", "Cloudflare Access 公钥请求失败。");
+  const payload = await response.json();
+  const jwk = payload?.keys?.find(key => key.kid === kid && key.kty === "RSA");
+  if (!jwk) throw new AccessError(401, "access_invalid", "Cloudflare Access 签名密钥不存在。");
+  let key;
+  try {
+    key = await crypto.subtle.importKey("jwk", jwk, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
+  } catch {
+    throw new AccessError(503, "access_keys_unavailable", "Cloudflare Access 公钥无法使用。");
+  }
+  accessKeyCache.set(cacheKey, { key, expiresAt: Date.now() + 5 * 60_000 });
+  return key;
+}
+
+export async function verifyAccessRequest(request, env, nowSeconds = Math.floor(Date.now() / 1000)) {
+  const { issuer, audiences, allowedEmails } = accessConfig(env);
+  const assertion = request.headers.get("Cf-Access-Jwt-Assertion") || "";
+  const parts = assertion.split(".");
+  if (parts.length !== 3 || parts.some(part => !part)) {
+    throw new AccessError(401, "access_required", "请先通过 Cloudflare Access 登录。");
+  }
+  const header = accessJson(parts[0], "JWT header");
+  const claims = accessJson(parts[1], "JWT payload");
+  if (header.alg !== "RS256" || typeof header.kid !== "string" || !header.kid) {
+    throw new AccessError(401, "access_invalid", "Cloudflare Access JWT 算法或密钥 ID 无效。");
+  }
+  const tokenAudiences = Array.isArray(claims.aud) ? claims.aud : [claims.aud].filter(Boolean);
+  const email = String(claims.email || "").trim().toLocaleLowerCase("en-US");
+  if (claims.iss !== issuer || !tokenAudiences.some(value => audiences.includes(value)) ||
+      !Number.isFinite(claims.exp) || claims.exp < nowSeconds - 60 ||
+      Number.isFinite(claims.nbf) && claims.nbf > nowSeconds + 60 ||
+      !email || !allowedEmails.has(email)) {
+    throw new AccessError(403, "access_forbidden", "当前 Cloudflare Access 身份无权访问此工作区。");
+  }
+  const key = await accessPublicKey(issuer, header.kid);
+  const valid = await crypto.subtle.verify(
+    { name: "RSASSA-PKCS1-v1_5" },
+    key,
+    accessBase64Url(parts[2]),
+    new TextEncoder().encode(`${parts[0]}.${parts[1]}`),
+  );
+  if (!valid) throw new AccessError(401, "access_invalid", "Cloudflare Access JWT 签名无效。");
+  return { email, subject: String(claims.sub || ""), expiresAt: new Date(claims.exp * 1000).toISOString() };
 }
 
 // ── 翻译 ──────────────────────────────────────────────
@@ -612,7 +717,7 @@ async function handleTts(request, env, origin, allowedOrigin) {
       headers: {
         "Access-Control-Allow-Origin": allowedOrigin,
         "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, X-API-Secret, Authorization",
+        "Access-Control-Allow-Headers": "Content-Type, Range",
         "Content-Type": "audio/mpeg",
         "X-TTS-Voice": selectedVoice,
         "Cache-Control": "private, max-age=86400",
@@ -1018,8 +1123,9 @@ function syncId(value, field = 'id', max = 120) {
   return value;
 }
 
-function syncSettings(value) {
-  const result = { id: 'resources', schema_version: 3 };
+function syncSettings(value, previous = null) {
+  const result = { id: 'resources', schema_version: 4 };
+  const timestamp = new Date().toISOString();
   for (const [key, limit] of [['languages', 200], ['groups', 200], ['types', 500]]) {
     syncAssert(Array.isArray(value[key]) && value[key].length <= limit, `${key} 必须是数组且不能超过 ${limit} 项。`);
     const ids = new Set();
@@ -1029,10 +1135,11 @@ function syncSettings(value) {
       syncAssert(Object.keys(item).every(k => (key === 'types' ? ['id', 'name', 'group', 'emoji'] : ['id', 'name']).includes(k)), `${key} 存在未知字段。`);
       const id = syncId(item.id);
       const name = syncText(item.name, 'name', 80, true).trim();
-      syncAssert(!ids.has(id) && !names.has(name), `${key} 的 ID 和名称不能重复。`);
+      const normalized = normalizeCollectionName(name);
+      syncAssert(!ids.has(id) && !names.has(normalized), `${key} 的 ID 和名称不能重复。`);
       syncAssert(key !== 'languages' || name !== '不限语言', '不限语言使用 language_id: null，不能作为语言标签。');
       ids.add(id);
-      names.add(name);
+      names.add(normalized);
       if (key !== 'types') return { id, name };
       const type = { id, name, emoji: syncText(item.emoji ?? '', 'emoji', 32).trim() };
       // group 仅作为历史迁移信息保留；新类型不再依赖分组。
@@ -1043,16 +1150,41 @@ function syncSettings(value) {
   for (const [key, limit] of [['tags', 1000], ['decks', 500]]) {
     const ids = new Set(), names = new Set();
     const source = value[key] ?? [];
+    const previousById = new Map((previous?.[key] || []).map(item => [item.id, item]));
     syncAssert(Array.isArray(source) && source.length <= limit, `${key} 必须是数组且不能超过 ${limit} 项。`);
     result[key] = source.map(item => {
-      syncAssert(syncRecord(item) && Object.keys(item).every(k => ['id', 'name', 'emoji'].includes(k)), `${key} 项格式无效。`);
+      const allowed = key === 'decks'
+        ? ['id', 'name', 'emoji', 'description', 'created_at', 'updated_at']
+        : ['id', 'name', 'emoji'];
+      syncAssert(syncRecord(item) && Object.keys(item).every(k => allowed.includes(k)), `${key} 项格式无效。`);
       const id = syncId(item.id), name = syncText(item.name, 'name', 80, true).trim();
-      const normalized = name.normalize('NFKC').toLocaleLowerCase();
+      const normalized = normalizeCollectionName(name);
       syncAssert(!ids.has(id) && !names.has(normalized), `${key} 的 ID 和名称不能重复。`);
       ids.add(id); names.add(normalized);
-      return { id, name, emoji: syncText(item.emoji ?? '', 'emoji', 32).trim() };
+      const definition = {
+        id,
+        name,
+        emoji: syncText(item.emoji ?? '', 'emoji', 32).trim(),
+        ...(key === 'decks' ? { description: syncText(item.description ?? '', 'description', 500).trim() } : {}),
+      };
+      if (key === 'decks') {
+        const prior = previousById.get(id);
+        const requestedCreatedAt = item.created_at === undefined ? null : syncTime(item.created_at, null);
+        const requestedUpdatedAt = item.updated_at === undefined ? null : syncTime(item.updated_at, null);
+        syncAssert(item.created_at === undefined || requestedCreatedAt !== null, 'Deck created_at 无效。');
+        syncAssert(item.updated_at === undefined || requestedUpdatedAt !== null, 'Deck updated_at 无效。');
+        definition.created_at = prior?.created_at || requestedCreatedAt || timestamp;
+        const changed = !prior || prior.name !== definition.name || (prior.emoji || '') !== definition.emoji ||
+          (prior.description || '') !== definition.description;
+        definition.updated_at = changed
+          ? timestamp
+          : prior?.updated_at || requestedUpdatedAt || definition.created_at;
+      }
+      return definition;
     });
   }
+  const groupIds = new Set(result.groups.map(group => group.id));
+  syncAssert(result.types.every(type => !type.group || groupIds.has(type.group)), 'Type 引用了不存在的旧 Group。');
   return result;
 }
 
@@ -1085,7 +1217,7 @@ async function syncSeedSettings(row) {
     converted.push({ id: typeof item === 'string' ? `lang_${await syncHash(name)}` : item.id, name });
   }
   // 迁移不套用写入时的裁剪/去重规则，避免静默丢失历史自定义名称。
-  return { id: 'resources', schema_version: 3, languages: converted, groups, types, tags: [], decks: [] };
+  return { id: 'resources', schema_version: 4, languages: converted, groups, types, tags: [], decks: [] };
 }
 
 async function ensureSyncV2(db, readOnly) {
@@ -1184,18 +1316,33 @@ function syncNormalizeData(op, current, snapshot) {
   syncAssert(Object.keys(op.patch).every(key => allowedFields[op.entity].includes(key)), 'patch 含有未知字段。');
   syncAssert(op.patch.id === undefined || op.patch.id === op.id, 'patch.id 不能修改对象 ID。');
   const value = { ...current?.data, ...op.patch, id: op.id };
-  const activeResources = snapshot.objects.filter(object => object.entity === 'resource' && !object.deleted);
+  // Tombstoned Resources remain restorable, so their taxonomy references are
+  // protected until an explicit merge/delete command rewrites those arrays.
+  const resourceObjects = snapshot.objects.filter(object => object.entity === 'resource');
   if (op.entity === 'settings') {
-    const data = syncSettings(value);
-    const removedLanguages = new Set((current?.data.languages || []).filter(item => !data.languages.some(next => next.id === item.id)).map(item => item.id));
-    const removedTypes = new Set((current?.data.types || []).filter(item => !data.types.some(next => next.id === item.id)).map(item => item.id));
-    if (activeResources.some(object => removedLanguages.has(object.data.language_id) || removedTypes.has(object.data.type))) {
-      throw new SyncError(409, 'reference_conflict', '不能删除仍被活动资源使用的语言或类型。', current);
+    const data = syncSettings(value, current?.data);
+    const removed = Object.fromEntries(['languages', 'types', 'tags', 'decks'].map(key => [
+      key,
+      new Set((current?.data[key] || []).filter(item => !data[key].some(next => next.id === item.id)).map(item => item.id)),
+    ]));
+    if (resourceObjects.some(object => removed.languages.has(object.data.language_id) ||
+        removed.types.has(object.data.type) ||
+        (object.data.tag_ids || []).some(id => removed.tags.has(id)) ||
+        (object.data.deck_ids || []).some(id => removed.decks.has(id)))) {
+      throw new SyncError(409, 'reference_conflict', '不能直接删除仍被资源或可恢复记录引用的配置；请先合并、重新分配或使用安全删除命令。', current);
     }
     return data;
   }
   const now = new Date().toISOString();
-  const data = { id: op.id, created_at: current?.data.created_at || now, updated_at: now };
+  let createdAt = current?.data.created_at || now;
+  if (!current && value.created_at !== undefined) {
+    syncAssert(typeof value.created_at === 'string' &&
+      /^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value.created_at), 'created_at 必须包含时区。');
+    const migratedTime = syncTime(value.created_at, null);
+    syncAssert(migratedTime && Date.parse(migratedTime) <= Date.now() + 300_000, 'created_at 无效或明显超前。');
+    createdAt = migratedTime;
+  }
+  const data = { id: op.id, created_at: createdAt, updated_at: now };
   if (op.entity === 'card' || op.entity === 'document') {
     syncAssert(value.language === undefined || ['en', 'ja', 'nl'].includes(value.language), 'language 必须是 en、ja 或 nl。');
     data.language = value.language || 'nl';
@@ -1266,10 +1413,22 @@ function syncValidateOperation(op) {
   if (op.kind === 'delete') syncAssert(Object.keys(op.patch).length === 0, 'delete 的 patch 必须为空对象。');
 }
 
-async function syncOperate(db, op) {
+async function syncOperate(db, op, { collectionsEndpoint = false } = {}) {
   const hash = await syncHash(syncCanonical(op));
   for (let attempt = 0; attempt < SYNC_RETRIES; attempt++) {
     const snapshot = await syncSnapshot(db, op.opId);
+    const runtime = await getCollectionsRuntime(db);
+    if (runtime?.mode === 'active' && runtime.migration_state !== 'verified') {
+      throw new SyncError(503, 'collections_unverified', 'Collections 尚未验证，active 写入已暂停。');
+    }
+    if (runtime?.mode !== 'retired' &&
+        (runtime?.source_sync_epoch !== snapshot.epoch || runtime?.source_sync_head !== snapshot.head)) {
+      throw new SyncError(503, 'collections_stale', 'Collections 投影落后于兼容数据；写入已暂停，必须重新迁移并验证。');
+    }
+    if (collectionsEndpoint) {
+      if (!runtime) throw new SyncError(503, 'collections_not_ready', 'Collections 数据表尚未迁移。');
+      if (!['resource', 'settings'].includes(op.entity)) throw new SyncError(400, 'invalid_request', 'Collections 端点只接受 resource 或 settings。');
+    }
     const stored = snapshot.objects.find(object => object.entity === op.entity && object.id === op.id) || null;
     const settings = snapshot.objects.find(object => object.entity === 'settings' && !object.deleted)?.data;
     const current = syncVisible(stored, settings);
@@ -1288,11 +1447,21 @@ async function syncOperate(db, op) {
     if (op.kind === 'delete' && op.entity === 'settings' && snapshot.objects.some(object => object.entity === 'resource' && !object.deleted)) {
       throw new SyncError(409, 'reference_conflict', '存在活动资源，不能删除资源配置。', current);
     }
+    if (op.kind === 'delete' && op.entity === 'settings' && runtime) {
+      throw new SyncError(409, 'reference_conflict', 'Collections 配置不能整体删除。', current);
+    }
     const data = op.kind === 'delete' ? stored.data : syncNormalizeData(op, stored, snapshot);
     const head = snapshot.head + 1;
     if (!Number.isSafeInteger(head)) throw new SyncError(503, 'revision_exhausted', '同步版本已达到上限。');
     const object = { entity: op.entity, id: op.id, revision: head, deleted: op.kind === 'delete', data };
     const response = { ok: true, epoch: snapshot.epoch, head, opId: op.opId, object: syncVisible(object, op.entity === 'settings' ? data : settings) };
+    const canonicalWrite = await collectionStatementsForSyncOperation(db, {
+      op,
+      previousData: stored?.data || null,
+      data,
+      revision: head,
+      deleted: op.kind === 'delete',
+    });
     const statements = [
       db.prepare(`INSERT INTO sync_v2_ops (op_id,request_hash,response,guard)
         VALUES (?,?,?, CASE WHEN
@@ -1302,6 +1471,7 @@ async function syncOperate(db, op) {
           THEN 1 ELSE 0 END)`)
         .bind(op.opId, hash, JSON.stringify(response), snapshot.epoch, snapshot.head,
           op.baseRevision, op.entity, op.id, op.entity, op.id, op.baseRevision, stored?.deleted ? 1 : 0),
+      ...canonicalWrite.statements,
       db.prepare(`INSERT INTO sync_v2_objects (entity,id,revision,deleted,data) VALUES (?,?,?,?,?)
         ON CONFLICT(entity,id) DO UPDATE SET revision=excluded.revision,deleted=excluded.deleted,data=excluded.data`)
         .bind(op.entity, op.id, head, object.deleted ? 1 : 0, JSON.stringify(data)),
@@ -1338,6 +1508,234 @@ async function syncOperate(db, op) {
   throw new SyncError(503, 'sync_busy', '并发写入较多，请使用相同 opId 和请求重试。');
 }
 
+function syncCommandIds(value, field, limit = 1000) {
+  syncAssert(Array.isArray(value) && value.length > 0 && value.length <= limit, `${field} 必须是 1–${limit} 个 ID。`);
+  const ids = value.map(id => syncId(id, field));
+  syncAssert(new Set(ids).size === ids.length, `${field} 不能包含重复 ID。`);
+  return ids;
+}
+
+function syncValidateCollectionCommand(command) {
+  syncAssert(syncRecord(command), '命令必须是对象。');
+  const allowed = new Set(['protocol', 'epoch', 'opId', 'baseHead', 'command', 'resource_ids', 'action', 'value', 'ids', 'source_id', 'target_id', 'completed_at']);
+  syncAssert(Object.keys(command).every(key => allowed.has(key)), '命令包含未知字段。');
+  syncAssert(command.protocol === 2, 'protocol 必须为 2。');
+  syncId(command.epoch, 'epoch', 200);
+  syncId(command.opId, 'opId', 200);
+  syncAssert(Number.isSafeInteger(command.baseHead) && command.baseHead >= 0, 'baseHead 必须为非负安全整数。');
+  syncAssert(['bulk', 'merge_tag', 'delete_tag', 'delete_deck', 'delete_type'].includes(command.command), 'Collections 命令无效。');
+  if (command.command === 'bulk') {
+    syncCommandIds(command.resource_ids, 'resource_ids');
+    syncAssert(['status', 'type', 'add_tags', 'remove_tags', 'add_decks', 'remove_decks', 'delete'].includes(command.action), '批量动作无效。');
+    if (['add_tags', 'remove_tags', 'add_decks', 'remove_decks'].includes(command.action)) syncCommandIds(command.ids, 'ids', 500);
+    if (command.action === 'type') syncId(command.value, 'value');
+    if (command.action === 'status') syncAssert(['backlog', 'active', 'completed'].includes(command.value), '状态无效。');
+    if (command.completed_at !== undefined) {
+      syncAssert(command.action === 'status' && command.value === 'completed' &&
+        syncTime(syncText(command.completed_at, 'completed_at', 40), null) !== null, '批量完成时间无效。');
+    }
+  } else {
+    syncAssert(command.completed_at === undefined, '此命令不接受 completed_at。');
+    syncId(command.source_id, 'source_id');
+    if (['merge_tag', 'delete_type'].includes(command.command)) syncId(command.target_id, 'target_id');
+  }
+}
+
+function changedResourceData(object, patch, snapshot) {
+  const op = { entity: 'resource', id: object.id, patch: { ...object.data, ...patch } };
+  return syncNormalizeData(op, object, snapshot);
+}
+
+async function syncOperateCollectionCommand(db, command) {
+  syncValidateCollectionCommand(command);
+  const requestHash = await syncHash(syncCanonical(command));
+  for (let attempt = 0; attempt < SYNC_RETRIES; attempt++) {
+    const snapshot = await syncSnapshot(db, command.opId);
+    const runtime = await getCollectionsRuntime(db);
+    if (!runtime) throw new SyncError(503, 'collections_not_ready', 'Collections 数据表尚未迁移。');
+    if (runtime.mode === 'retired') throw new SyncError(503, 'collections_retired', 'Collections 已回退到兼容同步，请刷新客户端。');
+    if (runtime.mode === 'active' && runtime.migration_state !== 'verified') {
+      throw new SyncError(503, 'collections_unverified', 'Collections 尚未验证，命令已暂停。');
+    }
+    if (runtime.source_sync_epoch !== snapshot.epoch || runtime.source_sync_head !== snapshot.head) {
+      throw new SyncError(503, 'collections_stale', 'Collections 投影落后于兼容数据；命令已暂停。');
+    }
+    if (snapshot.epoch !== command.epoch) throw new SyncError(409, 'epoch_mismatch', '同步 epoch 已变化，请重新读取状态。');
+    if (snapshot.receipt) {
+      if (snapshot.receipt.request_hash !== requestHash) throw new SyncError(409, 'op_id_conflict', 'opId 已用于不同请求。');
+      return JSON.parse(snapshot.receipt.response);
+    }
+    if (snapshot.head !== command.baseHead) {
+      throw new SyncError(409, 'revision_conflict', 'Collections 状态已变化，请刷新后重试。');
+    }
+    const settingsObject = snapshot.objects.find(object => object.entity === 'settings' && object.id === 'resources' && !object.deleted);
+    if (!settingsObject) throw new SyncError(503, 'collections_not_ready', '资源配置不存在。');
+    const settings = syncSettings(settingsObject.data, settingsObject.data);
+    const resources = new Map(snapshot.objects.filter(object => object.entity === 'resource').map(object => [object.id, object]));
+    const changed = new Map();
+    let nextSettings = null;
+    const specialStatements = [];
+    const timestamp = new Date().toISOString();
+
+    if (command.command === 'bulk') {
+      const ids = syncCommandIds(command.resource_ids, 'resource_ids');
+      const targets = ids.map(id => resources.get(id));
+      if (targets.some(object => !object || object.deleted)) {
+        throw new SyncError(409, 'resource_set_changed', '所选资源已删除或缺失，请刷新当前结果。');
+      }
+      if (command.action === 'type' && !settings.types.some(item => item.id === command.value)) {
+        throw new SyncError(409, 'reference_conflict', '目标 Type 已不存在。');
+      }
+      const relationKey = command.action.includes('tags') ? 'tags' : command.action.includes('decks') ? 'decks' : null;
+      if (relationKey) {
+        const valid = new Set(settings[relationKey].map(item => item.id));
+        if (command.ids.some(id => !valid.has(id))) throw new SyncError(409, 'reference_conflict', '所选 Tag 或 Deck 已不存在。');
+      }
+      for (const object of targets) {
+        let patch;
+        if (command.action === 'status') {
+          patch = {
+            status: command.value,
+            completed_at: command.value === 'completed'
+              ? (object.data.completed_at || command.completed_at || timestamp)
+              : '',
+          };
+        } else if (command.action === 'type') {
+          patch = { type: command.value };
+        } else if (command.action === 'delete') {
+          changed.set(object.id, { object, data: object.data, deleted: true });
+          continue;
+        } else {
+          const field = command.action.includes('tags') ? 'tag_ids' : 'deck_ids';
+          const current = [...new Set(object.data[field] || [])];
+          const selected = new Set(command.ids);
+          patch = {
+            [field]: command.action.startsWith('add_')
+              ? [...new Set([...current, ...command.ids])]
+              : current.filter(id => !selected.has(id)),
+          };
+        }
+        changed.set(object.id, { object, data: changedResourceData(object, patch, snapshot), deleted: false });
+      }
+    } else if (command.command === 'merge_tag' || command.command === 'delete_tag') {
+      const source = settings.tags.find(item => item.id === command.source_id);
+      const target = command.command === 'merge_tag' && settings.tags.find(item => item.id === command.target_id);
+      if (!source || command.command === 'merge_tag' && (!target || target.id === source.id)) {
+        throw new SyncError(409, 'reference_conflict', '源或目标 Tag 已不存在。');
+      }
+      for (const object of resources.values()) {
+        if (!(object.data.tag_ids || []).includes(source.id)) continue;
+        const next = command.command === 'merge_tag'
+          ? [...new Set((object.data.tag_ids || []).map(id => id === source.id ? target.id : id))]
+          : (object.data.tag_ids || []).filter(id => id !== source.id);
+        changed.set(object.id, { object, data: changedResourceData(object, { tag_ids: next }, snapshot), deleted: object.deleted });
+      }
+      nextSettings = syncSettings({ ...settings, tags: settings.tags.filter(item => item.id !== source.id) }, settings);
+      specialStatements.push(db.prepare(
+        'UPDATE collection_tags SET deleted_at=?,updated_at=?,revision=?,merged_into_id=? WHERE id=?',
+      ).bind(timestamp, timestamp, snapshot.head + 1, target?.id || null, source.id));
+    } else if (command.command === 'delete_deck') {
+      const source = settings.decks.find(item => item.id === command.source_id);
+      if (!source) throw new SyncError(409, 'reference_conflict', 'Deck 已不存在。');
+      for (const object of resources.values()) {
+        if (!(object.data.deck_ids || []).includes(source.id)) continue;
+        changed.set(object.id, {
+          object,
+          data: changedResourceData(object, { deck_ids: object.data.deck_ids.filter(id => id !== source.id) }, snapshot),
+          deleted: object.deleted,
+        });
+      }
+      nextSettings = syncSettings({ ...settings, decks: settings.decks.filter(item => item.id !== source.id) }, settings);
+      specialStatements.push(db.prepare(
+        'UPDATE collection_decks SET deleted_at=?,updated_at=?,revision=?,merged_into_id=NULL WHERE id=?',
+      ).bind(timestamp, timestamp, snapshot.head + 1, source.id));
+    } else if (command.command === 'delete_type') {
+      const source = settings.types.find(item => item.id === command.source_id);
+      const target = settings.types.find(item => item.id === command.target_id);
+      if (!source || !target || source.id === target.id) throw new SyncError(409, 'reference_conflict', '源或重新分配 Type 已不存在。');
+      for (const object of resources.values()) {
+        if (object.data.type !== source.id) continue;
+        changed.set(object.id, {
+          object,
+          data: changedResourceData(object, { type: target.id }, snapshot),
+          deleted: object.deleted,
+        });
+      }
+      nextSettings = syncSettings({ ...settings, types: settings.types.filter(item => item.id !== source.id) }, settings);
+      specialStatements.push(db.prepare(
+        'UPDATE collection_types SET deleted_at=?,updated_at=?,revision=?,merged_into_id=? WHERE id=?',
+      ).bind(timestamp, timestamp, snapshot.head + 1, target.id, source.id));
+    }
+
+    const head = snapshot.head + 1;
+    if (!Number.isSafeInteger(head)) throw new SyncError(503, 'revision_exhausted', '同步版本已达到上限。');
+    const settingsData = nextSettings || settings;
+    const response = {
+      ok: true,
+      epoch: snapshot.epoch,
+      head,
+      opId: command.opId,
+      command: command.command,
+      changed_resource_ids: [...changed.keys()],
+      settings_changed: Boolean(nextSettings),
+    };
+    const statements = [
+      db.prepare(`INSERT INTO sync_v2_ops (op_id,request_hash,response,guard)
+        VALUES (?,?,?, CASE WHEN
+          EXISTS (SELECT 1 FROM sync_v2_meta WHERE id=1 AND epoch=? AND head=?)
+          THEN 1 ELSE 0 END)`)
+        .bind(command.opId, requestHash, JSON.stringify(response), snapshot.epoch, snapshot.head),
+    ];
+    if (nextSettings) {
+      statements.push(...collectionSettingsStatements(db, settings, nextSettings, head, timestamp));
+      statements.push(db.prepare(`INSERT INTO sync_v2_objects (entity,id,revision,deleted,data)
+        VALUES ('settings','resources',?,0,?)
+        ON CONFLICT(entity,id) DO UPDATE SET revision=excluded.revision,deleted=0,data=excluded.data`)
+        .bind(head, JSON.stringify(nextSettings)));
+    }
+    if (changed.size) {
+      const changedValues = [...changed.values()];
+      statements.push(...collectionResourcesStatements(db, changedValues, head, timestamp));
+      const projectionPayload = changedValues.map(({ object, data, deleted }) => ({
+        id: object.id,
+        deleted: deleted ? 1 : 0,
+        data: JSON.stringify(data),
+      }));
+      for (const payload of collectionJsonPayloads(projectionPayload)) {
+        statements.push(db.prepare(`INSERT INTO sync_v2_objects (entity,id,revision,deleted,data)
+          SELECT 'resource',json_extract(value,'$.id'),?,json_extract(value,'$.deleted'),json_extract(value,'$.data')
+          FROM json_each(?) WHERE 1
+          ON CONFLICT(entity,id) DO UPDATE SET
+            revision=excluded.revision,deleted=excluded.deleted,data=excluded.data`)
+          .bind(head, payload));
+      }
+    }
+    statements.push(...specialStatements);
+    statements.push(
+      db.prepare('UPDATE collection_runtime SET source_sync_head=?,updated_at=? WHERE id=1').bind(head, timestamp),
+      db.prepare('UPDATE sync_v2_meta SET head=head+1 WHERE id=1 AND epoch=? AND head=?').bind(snapshot.epoch, snapshot.head),
+      db.prepare(`UPDATE sync_v2_ops SET guard=CASE WHEN
+        EXISTS (SELECT 1 FROM sync_v2_meta WHERE id=1 AND epoch=? AND head=?)
+        THEN 1 ELSE 0 END WHERE op_id=?`).bind(snapshot.epoch, head, command.opId),
+    );
+    try {
+      await db.batch(statements);
+      return response;
+    } catch (error) {
+      const latest = await syncSnapshot(db, command.opId);
+      if (latest.receipt) {
+        if (latest.receipt.request_hash !== requestHash) throw new SyncError(409, 'op_id_conflict', 'opId 已用于不同请求。');
+        return JSON.parse(latest.receipt.response);
+      }
+      if (latest.head !== snapshot.head || latest.epoch !== snapshot.epoch) {
+        throw new SyncError(409, 'revision_conflict', 'Collections 状态已变化，请刷新后重试。');
+      }
+      throw error;
+    }
+  }
+  throw new SyncError(503, 'sync_busy', 'Collections 命令暂时繁忙，请使用相同 opId 重试。');
+}
+
 async function handleSyncV2(request, env, origin, allowedOrigin) {
   const respond = (body, status) => {
     const response = json(body, status, origin, allowedOrigin);
@@ -1346,24 +1744,98 @@ async function handleSyncV2(request, env, origin, allowedOrigin) {
   };
   try {
     const path = new URL(request.url).pathname;
-    const state = path === '/api/sync/state';
+    const rawState = path === '/api/sync/raw-state';
+    const state = path === '/api/sync/state' || rawState;
     if (request.method !== (state ? 'GET' : 'POST')) return respond({ error: '请求方法不支持。', code: 'method_not_allowed' }, 405);
     if (!state && env.SYNC_READ_ONLY === '1') throw new SyncError(503, 'sync_read_only', '同步暂时只读，请保留未提交操作。');
     let op;
     if (!state) {
       try { op = await request.json(); } catch { throw new SyncError(400, 'invalid_request', '请求体必须是 JSON。'); }
       syncValidateOperation(op);
+      if (env.COLLECTIONS_READ_ONLY === '1' && ['resource', 'settings'].includes(op.entity)) {
+        throw new SyncError(503, 'collections_read_only', 'Collections 暂时只读，请保留本机队列。');
+      }
     }
     // 开启 D1 读副本时也从主库启动会话，避免把过期 head 用于 CAS 重试。
     const db = env.DB.withSession ? env.DB.withSession('first-primary') : env.DB;
     await ensureSyncV2(db, env.SYNC_READ_ONLY === '1');
     if (!state) return respond(await syncOperate(db, op), 200);
     const snapshot = await syncSnapshot(db);
+    if (rawState) {
+      return respond({
+        protocol: 2,
+        raw: true,
+        epoch: snapshot.epoch,
+        head: snapshot.head,
+        objects: snapshot.objects,
+      }, 200);
+    }
     const settings = snapshot.objects.find(object => object.entity === 'settings' && !object.deleted)?.data;
     return respond({ protocol: 2, epoch: snapshot.epoch, head: snapshot.head, objects: snapshot.objects.map(object => syncVisible(object, settings)) }, 200);
   } catch (error) {
-    if (error instanceof SyncError) return respond({ error: error.message, code: error.code, ...(error.status === 409 ? { current: error.current } : {}) }, error.status);
+    if (error instanceof SyncError || error instanceof CollectionError) {
+      return respond({ error: error.message, code: error.code, ...(error.status === 409 ? { current: error.current } : {}) }, error.status);
+    }
     return respond({ error: '同步存储暂时不可用，请使用相同 opId 和请求重试。', code: 'storage_error' }, 503);
+  }
+}
+
+async function handleCollections(request, env, origin, allowedOrigin) {
+  const respond = (body, status = 200) => {
+    const response = json(body, status, origin, allowedOrigin);
+    response.headers.set('Cache-Control', 'no-store');
+    return response;
+  };
+  try {
+    const path = new URL(request.url).pathname;
+    const state = path === '/api/collections/state';
+    const verify = path === '/api/collections/verify';
+    if (state || verify) {
+      if (request.method !== 'GET') return respond({ error: '请求方法不支持。', code: 'method_not_allowed' }, 405);
+    } else if (path === '/api/collections/operations' || path === '/api/collections/commands') {
+      if (request.method !== 'POST') return respond({ error: '请求方法不支持。', code: 'method_not_allowed' }, 405);
+    } else {
+      return respond({ error: '未知的 Collections 路径。', code: 'not_found' }, 404);
+    }
+    const db = env.DB.withSession ? env.DB.withSession('first-primary') : env.DB;
+    await ensureSyncV2(db, env.SYNC_READ_ONLY === '1');
+    if (state) {
+      const runtime = await getCollectionsRuntime(db);
+      if (runtime?.mode === 'retired') {
+        const snapshot = await syncSnapshot(db);
+        const settings = snapshot.objects.find(object => object.entity === 'settings' && !object.deleted)?.data;
+        return respond({
+          protocol: 2,
+          collections_schema: 0,
+          mode: 'retired',
+          epoch: snapshot.epoch,
+          head: snapshot.head,
+          objects: snapshot.objects
+            .filter(object => object.entity === 'settings' || object.entity === 'resource')
+            .map(object => syncVisible(object, settings)),
+        });
+      }
+      return respond(await canonicalCollectionsSnapshot(db));
+    }
+    if (verify) return respond(await verifyCollectionsProjection(db));
+    if (env.COLLECTIONS_READ_ONLY === '1' || env.SYNC_READ_ONLY === '1') {
+      throw new SyncError(503, 'collections_read_only', 'Collections 暂时只读，请保留本机队列。');
+    }
+    let op;
+    try { op = await request.json(); } catch { throw new SyncError(400, 'invalid_request', '请求体必须是 JSON。'); }
+    if (path === '/api/collections/commands') return respond(await syncOperateCollectionCommand(db, op));
+    syncValidateOperation(op);
+    return respond(await syncOperate(db, op, { collectionsEndpoint: true }));
+  } catch (error) {
+    if (error instanceof SyncError || error instanceof CollectionError) {
+      return respond({
+        error: error.message,
+        code: error.code,
+        ...(error.status === 409 ? { current: error.current ?? null } : {}),
+      }, error.status);
+    }
+    console.error('Collections request failed', error);
+    return respond({ error: 'Collections 存储暂时不可用。', code: 'storage_error' }, 503);
   }
 }
 
@@ -1383,20 +1855,30 @@ export default {
     }
 
     const url = new URL(request.url);
-    if (url.pathname === "/api/auth" && request.method === "POST") {
-      return json({ token: env.API_SECRET || null }, 200, origin, allowedOrigin);
-    }
-
-    const token = extractToken(request);
-    const isRead = request.method === "GET";
-    if (!isRead && !authOK(request, env, token)) {
-      return json({ error: "无效的访问令牌。" }, 401, origin, allowedOrigin);
+    let identity;
+    try {
+      identity = await verifyAccessRequest(request, env);
+    } catch (error) {
+      if (error instanceof AccessError) {
+        const response = json({ error: error.message, code: error.code }, error.status, origin, allowedOrigin);
+        response.headers.set("Cache-Control", "no-store");
+        return response;
+      }
+      return json({ error: "Cloudflare Access 鉴权暂时不可用。", code: "access_unavailable" }, 503, origin, allowedOrigin);
     }
 
     const path = url.pathname;
+    if (path === "/api/session" && request.method === "GET") {
+      const response = json({ authenticated: true, email: identity.email, expires_at: identity.expiresAt }, 200, origin, allowedOrigin);
+      response.headers.set("Cache-Control", "no-store");
+      return response;
+    }
 
-    if (path === '/api/sync/state' || path === '/api/sync/operations') {
+    if (path === '/api/sync/state' || path === '/api/sync/raw-state' || path === '/api/sync/operations') {
       return handleSyncV2(request, env, origin, allowedOrigin);
+    }
+    if (path.startsWith('/api/collections/')) {
+      return handleCollections(request, env, origin, allowedOrigin);
     }
     // 保留原鉴权次序；已授权的旧同步请求统一拒绝，禁止旧缓存覆盖或复活。
     if (/^\/api\/(cards|documents|resources|resource-settings)(?:\/|$)/.test(path)) {

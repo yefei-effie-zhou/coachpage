@@ -5,7 +5,12 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check assets/app.js && node --check assets/sync-v2.js && node --check worker.js && node --check worker/collections.js && node --check scripts/lib/collections-migration.mjs && node --check scripts/migrate-collections.mjs && node --check scripts/verify-collections.mjs && node --check scripts/render-collections-mode.mjs",
+    "collections:migrate": "node scripts/migrate-collections.mjs",
+    "collections:verify": "node scripts/verify-collections.mjs",
+    "collections:mode": "node scripts/render-collections-mode.mjs"
   },
   "dependencies": {
     "@tiptap/core": "^3.31.3",
@@ -19,6 +24,7 @@
     "@tiptap/starter-kit": "^3.31.3"
   },
   "devDependencies": {
+    "fake-indexeddb": "^6.2.8",
     "vite": "^7.2.2"
   }
 }

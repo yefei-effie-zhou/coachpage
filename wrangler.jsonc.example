@@ -1,0 +1,30 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "coachpage-worker",
+  "main": "worker.js",
+  "compatibility_date": "2026-11-23",
+  "workers_dev": false,
+  "migrations_dir": "migrations",
+  "vars": {
+    "ALLOWED_ORIGIN": "https://your-app.example.com",
+    "ACCESS_ISSUER": "https://your-team.cloudflareaccess.com",
+    "ACCESS_AUD": "replace-with-access-application-audience",
+    "ACCESS_ALLOWED_EMAILS": "you@example.com",
+    "SYNC_READ_ONLY": "1",
+    "COLLECTIONS_READ_ONLY": "1"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "replace-with-d1-name",
+      "database_id": "replace-with-d1-id",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "AUDIO_BUCKET",
+      "bucket_name": "replace-with-r2-bucket"
+    }
+  ]
+}

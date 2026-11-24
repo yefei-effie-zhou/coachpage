@@ -38,8 +38,30 @@ if (!FEATURES.conversation) {
   const defaultGptProxyUrl = defaultApiBaseUrl + '/api/translate';
 
   // ── 云端 API 配置 ────────────────────────────────
-  let apiConfig = JSON.parse(localStorage.getItem(apiKey) || sessionStorage.getItem(apiKey) || 'null') || { baseUrl: '', secret: '' };
+  const storedApiConfig = (() => {
+    try { return JSON.parse(localStorage.getItem(apiKey) || sessionStorage.getItem(apiKey) || 'null'); }
+    catch { return null; }
+  })();
+  let apiConfig = {
+    baseUrl: typeof storedApiConfig?.baseUrl === 'string' ? storedApiConfig.baseUrl : '',
+    email: typeof storedApiConfig?.email === 'string' ? storedApiConfig.email : '',
+  };
+  // 旧版本会把 Worker 主密钥写进浏览器；升级后立即从持久配置中移除。
+  if (storedApiConfig?.secret) {
+    const sanitized = apiConfig.baseUrl ? JSON.stringify(apiConfig) : null;
+    if (sanitized) localStorage.setItem(apiKey, sanitized);
+    else localStorage.removeItem(apiKey);
+    sessionStorage.removeItem(apiKey);
+  }
   const normalizeScope = value => String(value).trim().replace(/\/+$/, '');
+  const productionFrontendOrigin = 'https://coach-page.yefeizhou0086.workers.dev';
+  const apiRequestUrl = value => {
+    const parsed = new URL(value, location.href);
+    if (location.origin === productionFrontendOrigin && parsed.origin === defaultApiBaseUrl) {
+      return location.origin + parsed.pathname + parsed.search + parsed.hash;
+    }
+    return parsed.href;
+  };
   const initialScope = normalizeScope(apiConfig.baseUrl || localStorage.getItem(scopeKey) || defaultApiBaseUrl);
   let activeScope = initialScope;
   const key = 'dutch-transcript-notebook-v2:' + encodeURIComponent(initialScope);
@@ -49,7 +71,8 @@ if (!FEATURES.conversation) {
   };
   if (!localStorage.getItem(migrationKey)) localStorage.setItem(migrationKey, JSON.stringify(migration));
   const legacyState = JSON.parse(migration.raw || 'null');
-  let engine = null, syncInitialized = false, syncBusy = false, networkGeneration = 0;
+  let engine = null, collectionsEngine = null, collectionsRecoveryEngine = null;
+  let syncInitialized = false, syncBusy = false, networkGeneration = 0;
   let projectionRenderTimer = 0, flushTimer = 0, syncPanelBusy = false;
   let lastSyncAttempt = 0, syncFailure = '', flushAfterSync = false;
   const syncRequests = new Set();
@@ -72,7 +95,7 @@ if (!FEATURES.conversation) {
   state.schemaVersion = 2;
   state.audioUrl = state.audioUrl || '';
   state.displayLanguage = state.displayLanguage === 'en' ? 'en' : 'zh';
-  // null 表示默认 110%，不能通过 Number(null) 被刷新转换为最小字号 90%。
+  // null 表示默认 100%，不能通过 Number(null) 被刷新转换为最小字号 90%。
   state.siteFontScale = state.siteFontScale != null && state.siteFontScale !== '' && Number.isFinite(Number(state.siteFontScale))
     ? Math.min(1.25, Math.max(.9, Number(state.siteFontScale)))
     : null;
@@ -193,7 +216,15 @@ if (!FEATURES.conversation) {
   function snapshotBackup(reason = 'auto') {
     try {
       if (!syncInitialized) return false;
-      const payload = { version: 2, reason, savedAt: new Date().toISOString(), state, sync: engine.exportBackup(), migration };
+      const payload = {
+        version: 3,
+        reason,
+        savedAt: new Date().toISOString(),
+        state,
+        sync: engine.exportBackup(),
+        ...(collectionsSyncClient() ? { collectionsSync: collectionsSyncClient().exportBackup() } : {}),
+        migration,
+      };
       localStorage.setItem(backupKey, JSON.stringify(payload));
       const status = $('#backupStatus');
       if (status) status.textContent = `最近备份：${new Intl.DateTimeFormat(state.displayLanguage === 'en' ? 'en-US' : 'zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(payload.savedAt))}`;
@@ -221,7 +252,9 @@ if (!FEATURES.conversation) {
     '返回列表':'Back to list','编辑内容':'Edit content','删除此全文':'Delete document','更自然：':'More natural:','纠正版本：':'Corrected version:',
     '解析':'Analyze','查看分词、读音、词性与释义。':'View words, readings, parts of speech and meanings.','收起':'Collapse','展开':'Expand','选取正文':'Use selection','显示假名':'Show furigana','显示罗马字':'Show romaji','加入词卡':'Add flashcard','朗读词语':'Read word','输入日语，或选取正文…':'Enter Japanese or use a text selection…',
     '把想看的内容变成清晰、可以完成的待看列表。':'Turn things you want to explore into a clear, finishable list.','＋ 添加资源':'+ Add resource','搜索名称、主题或语言…':'Search name, topic or language…','全部主题':'All topics','主题筛选':'Topic filter','类型筛选':'Type filter','全部类型':'All types','电影 / 剧集':'Films / series','书籍':'Books','课程':'Courses','网站':'Websites','综艺':'Variety shows','待处理':'Up next','完成后自动归档':'Completed items are archived automatically','添加资源':'Add resource','编辑资源':'Edit resource','保存资源':'Save resource','链接（可选）':'Link (optional)','类型':'Type','主题':'Topic','收藏理由':'Why I saved this','为什么想看？留下一句以后仍然有用的话…':'Why do you want to explore this? Leave one useful note for later…','待看':'Backlog','进行中':'In progress','已完成':'Completed','开始':'Start','稍后再看':'Backlog','恢复到待看':'Restore to backlog','待看清单':'Saved for later','收下想看的内容，在合适的时候开始。':'Save what interests you and start when the time is right.','新资源':'New resource','填入必要信息即可，之后随时可以编辑。':'Add only the essentials. You can edit them later.','不限语言':'Any language','清空':'Clear','关闭字号设置':'Close font size settings',
-    '词卡':'Flashcards','收起词卡侧栏':'Collapse flashcards','展开词卡侧栏':'Expand flashcards','按间隔安排下次复习。':'Your next review follows the interval schedule.','粘贴 YouTube 链接即可播放。':'Paste a YouTube link to play.','音频':'Audio','链接随文本保存；本地文件仅供预览。':'Links are saved; local files are preview-only.','粘贴音频链接或上传文件。':'Paste an audio link or upload a file.','还没有词卡':'No flashcards yet','从正文中选取内容即可添加':'Select text in the document to add one.','完成。点击词语查看详情。':'Done. Select a word for details.','数据备份':'Data backup','自动保留最近一份本地备份。':'The latest local backup is kept automatically.','导出备份':'Export backup','恢复备份':'Restore backup','确认操作':'Confirm action','确认':'Confirm','明天再看':'Review tomorrow','显示':'Display','资源设置':'Resource settings','立即同步':'Sync now','资源分组':'Resource groups','语言标签':'Language labels','资源类型':'Resource types','取消选择':'Clear selection','删除所选':'Delete selected','每种类型归入一个资源分组。':'Assign each type to a resource group.','语言和类型只用于资源库，不影响 Notebook。':'Language and type settings apply only to Resources.','编辑工作、学习和课余，也可以添加自己的分组。':'Rename the default groups or add your own.','添加、重命名或移除资源使用的语言。':'Add, rename or remove resource languages.','选择资源图标':'Choose resource icon','选择图标':'Choose icon','关闭图标选择器':'Close icon picker','自定义 emoji':'Custom emoji','粘贴任意 emoji…':'Paste any emoji…','常用 emoji':'Common emoji','恢复默认图标':'Restore default icon','更改图标':'Change icon','搜索 emoji':'Search emoji','搜索 emoji…':'Search emoji…','Emoji 列表':'Emoji list','Emoji 分类':'Emoji categories','最近使用':'Recently used','表情与人物':'Smileys & people','动物与自然':'Animals & nature','食物与饮品':'Food & drink','活动':'Activities','旅行与地点':'Travel & places','物品':'Objects','符号':'Symbols','旗帜':'Flags','搜索结果':'Search results','没有匹配的 emoji':'No matching emoji','粘贴 emoji…':'Paste emoji…','粘贴任意 emoji':'Paste any emoji','使用默认图标':'Use default icon','图标':'Icon','选择一个 emoji':'Choose an emoji','关闭资源详情':'Close resource details','打开链接':'Open link','资源分组':'Resource group','未设置':'Not set','没有说明':'No description'
+    '词卡':'Flashcards','收起词卡侧栏':'Collapse flashcards','展开词卡侧栏':'Expand flashcards','按间隔安排下次复习。':'Your next review follows the interval schedule.','粘贴 YouTube 链接即可播放。':'Paste a YouTube link to play.','音频':'Audio','链接随文本保存；本地文件仅供预览。':'Links are saved; local files are preview-only.','粘贴音频链接或上传文件。':'Paste an audio link or upload a file.','还没有词卡':'No flashcards yet','从正文中选取内容即可添加':'Select text in the document to add one.','完成。点击词语查看详情。':'Done. Select a word for details.','数据备份':'Data backup','自动保留最近一份本地备份。':'The latest local backup is kept automatically.','导出备份':'Export backup','恢复备份':'Restore backup','确认操作':'Confirm action','确认':'Confirm','明天再看':'Review tomorrow','显示':'Display','资源设置':'Resource settings','立即同步':'Sync now','资源分组':'Resource groups','语言标签':'Language labels','资源类型':'Resource types','取消选择':'Clear selection','删除所选':'Delete selected','每种类型归入一个资源分组。':'Assign each type to a resource group.','语言和类型只用于资源库，不影响 Notebook。':'Language and type settings apply only to Resources.','编辑工作、学习和课余，也可以添加自己的分组。':'Rename the default groups or add your own.','添加、重命名或移除资源使用的语言。':'Add, rename or remove resource languages.','选择资源图标':'Choose resource icon','选择图标':'Choose icon','关闭图标选择器':'Close icon picker','自定义 emoji':'Custom emoji','粘贴任意 emoji…':'Paste any emoji…','常用 emoji':'Common emoji','恢复默认图标':'Restore default icon','更改图标':'Change icon','搜索 emoji':'Search emoji','搜索 emoji…':'Search emoji…','Emoji 列表':'Emoji list','Emoji 分类':'Emoji categories','最近使用':'Recently used','表情与人物':'Smileys & people','动物与自然':'Animals & nature','食物与饮品':'Food & drink','活动':'Activities','旅行与地点':'Travel & places','物品':'Objects','符号':'Symbols','旗帜':'Flags','搜索结果':'Search results','没有匹配的 emoji':'No matching emoji','粘贴 emoji…':'Paste emoji…','粘贴任意 emoji':'Paste any emoji','使用默认图标':'Use default icon','图标':'Icon','选择一个 emoji':'Choose an emoji','关闭资源详情':'Close resource details','打开链接':'Open link','资源分组':'Resource group','未设置':'Not set','没有说明':'No description',
+    '收藏工作台':'Collections','快速保存，再用类型、标签与收藏册慢慢整理。':'Save quickly, then organize with types, tags, and decks.','管理收藏册':'Manage decks','全部项目':'All items','更多信息':'More details','旧主题（可选）':'Legacy topic (optional)','保留旧分类信息…':'Preserve legacy category details…','标签':'Tags','收藏册':'Decks','搜索或选择标签…':'Search or select tags…','搜索收藏册…':'Search decks…','旧主题筛选':'Legacy topic filter','全部旧主题':'All legacy topics','标签筛选':'Tag filter','收藏册筛选':'Deck filter','最近添加':'Recently added','完成日期':'Completion date','清空筛选':'Clear filters','全选当前筛选结果':'Select all filtered results','选择批量操作':'Choose a bulk action','批量操作':'Bulk action','批量操作值':'Bulk value','修改状态':'Change status','修改类型':'Change type','添加标签':'Add tags','移除标签':'Remove tags','加入收藏册':'Add to decks','移出收藏册':'Remove from decks','应用':'Apply','详情':'Details','共 0 条资源':'0 resources','没有符合当前筛选的资源。':'No resources match the current filters.','还没有资源。先保存一条，之后再慢慢整理。':'No resources yet. Save one now and organize it later.',
+    '语言和类型独立管理；旧分组仅保留为迁移资料。':'Languages and types are managed independently; legacy groups are retained only for migration.','Type 表示内容形式，不再依赖资源分组。':'A type describes content format and no longer depends on a group.','标签可跨类型描述主题、兴趣、用途与来源。':'Tags describe topics, interests, purposes, and sources across types.','新类型':'New type','新标签':'New tag','搜索标签…':'Search tags…','按名称':'By name','使用最多':'Most used','使用最少':'Least used','合并':'Merge','使用中':'in use','未使用':'unused','主动整理一组资源；删除收藏册不会删除资源。':'Curate a set of resources; deleting a deck never deletes its resources.','收藏册名称':'Deck name','类型名称':'Type name','标签名称':'Tag name','语言名称':'Language name','说明（可选）':'Description (optional)','创建':'Create','关闭收藏册管理':'Close deck manager','删除收藏册':'Delete deck','删除标签':'Delete tag','删除类型':'Delete type','暂无资源':'No resources','暂无结果':'No results','暂无待处理':'No pending items','暂无已完成':'No completed items','暂无收藏册':'No decks'
   };
   const reverseInterfaceTranslations = Object.fromEntries(Object.entries(interfaceTranslations).map(([zh, en]) => [en, zh]));
   let translatingInterface = false;
@@ -240,7 +273,7 @@ if (!FEATURES.conversation) {
     return value;
   }
   function shouldSkipInterfaceNode(node) {
-    return node.parentElement?.closest('[data-archive-user-content],#editor,.chat-bubble,.archive-transcript,.review-list-front,.study-card-term,.title-input,#displayLanguage,.product-switch,#resourceDetailName,.resource-detail-description,.resource-detail-meta dd');
+    return node.parentElement?.closest('[data-archive-user-content],[data-resource-user-content],#editor,.chat-bubble,.archive-transcript,.review-list-front,.study-card-term,.title-input,#displayLanguage,.product-switch,#resourceDetailName,.resource-detail-description,.resource-detail-meta dd');
   }
   function applyInterfaceLanguage(root = document.body) {
     if (translatingInterface) return;
@@ -269,7 +302,7 @@ if (!FEATURES.conversation) {
     translatingInterface = false;
   }
   function effectiveSiteFontScale() {
-    return state.siteFontScale == null ? 1.1 : state.siteFontScale;
+    return state.siteFontScale == null ? 1 : state.siteFontScale;
   }
   function applySiteFontScale() {
     const scale = effectiveSiteFontScale(), percent = Math.round(scale * 100);
@@ -443,9 +476,9 @@ if (!FEATURES.conversation) {
     player.removeAttribute('src');
     player.dataset.activeSource = source || '';
     if (!source) { player.load(); return; }
-    const playbackSource = isNhkMediaUrl(source) && isApiOnline()
+    const playbackSource = apiRequestUrl(isNhkMediaUrl(source) && isApiOnline()
       ? `${apiConfig.baseUrl}/api/nhk-hls?url=${encodeURIComponent(source)}`
-      : source;
+      : source);
     if (!isHlsAudioUrl(source)) {
       player.src = playbackSource;
       if (autoplay) await player.play().catch(() => {});
@@ -483,7 +516,7 @@ if (!FEATURES.conversation) {
     $('#audioEmpty').hidden = !!activeSource || !!articleUrl;
     $('#nhkPagePlayer').hidden = !articleUrl;
     $('#openAudio').hidden = !remoteUrl || !!articleUrl;
-    $('#openAudio').href = remoteUrl || '#';
+    $('#openAudio').href = remoteUrl ? apiRequestUrl(remoteUrl) : '#';
     attachAudioSource(activeSource, autoplay);
     if (typeof queueFloatingAudioUpdate === 'function') queueFloatingAudioUpdate();
   }
@@ -535,7 +568,7 @@ if (!FEATURES.conversation) {
       const headers = apiHeaders();
       headers['Content-Type'] = file.type || 'application/octet-stream';
       headers['X-Audio-Filename'] = encodeURIComponent(file.name);
-      const response = await fetch(apiConfig.baseUrl + '/api/audio', { method: 'POST', headers, body: file });
+      const response = await fetch(apiRequestUrl(apiConfig.baseUrl + '/api/audio'), { method: 'POST', headers, body: file, credentials: 'include' });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || '音频上传失败。');
       clearLocalAudioUrl(); state.audioUrl = payload.url; save(); renderAudio();
@@ -724,9 +757,10 @@ if (!FEATURES.conversation) {
     if (speakingButton) speakingButton.classList.add('playing');
 
     try {
-      const response = await fetch(apiConfig.baseUrl + '/api/tts', {
+      const response = await fetch(apiRequestUrl(apiConfig.baseUrl + '/api/tts'), {
         method: 'POST',
         headers: apiHeaders(),
+        credentials: 'include',
         body: JSON.stringify({ text: sentence, speed: state.audioSpeed, language, previous_voice: lastTtsVoice[language] || '' }),
       });
       if (!response.ok) {
@@ -768,12 +802,31 @@ if (!FEATURES.conversation) {
   }
 
   function apiHeaders() {
-    const h = { 'Content-Type': 'application/json' };
-    if (apiConfig.secret) h['X-API-Secret'] = apiConfig.secret;
-    return h;
+    return { 'Content-Type': 'application/json' };
   }
 
-  function syncSummary(status = engine?.status()) {
+  function resourceEngine() {
+    return collectionsEngine || engine;
+  }
+
+  function collectionsSyncClient() {
+    return collectionsEngine || collectionsRecoveryEngine;
+  }
+
+  function combinedSyncStatus() {
+    const statuses = [engine, collectionsEngine, collectionsRecoveryEngine].filter(Boolean).map(instance => instance.status());
+    if (!statuses.length) return null;
+    return {
+      pending: statuses.reduce((sum, status) => sum + (status.pending || 0), 0),
+      conflicts: statuses.reduce((sum, status) => sum + (status.conflicts || 0), 0),
+      candidates: statuses.reduce((sum, status) => sum + (status.candidates || 0), 0),
+      ready: statuses.every(status => status.ready),
+      error: statuses.map(status => status.error).filter(Boolean).join(' · '),
+      epochChanged: statuses.some(status => status.epochChanged),
+    };
+  }
+
+  function syncSummary(status = combinedSyncStatus()) {
     if (!status) return '正在读取本机内容';
     const parts = ['本机已保存'];
     const confirmations = (status.conflicts || 0) + (status.candidates || 0);
@@ -789,7 +842,7 @@ if (!FEATURES.conversation) {
   }
 
   function updateSyncIndicator() {
-    const status = engine?.status();
+    const status = combinedSyncStatus();
     const style = status?.error || syncFailure || status?.epochChanged ? 'error' : syncBusy ? 'syncing'
       : status?.pending || status?.conflicts || status?.candidates ? 'pending' : status?.ready && isApiOnline() ? 'online' : 'offline';
     const el = $('#syncStatus');
@@ -809,7 +862,7 @@ if (!FEATURES.conversation) {
     syncRequests.add(controller);
     const timer = setTimeout(() => controller.abort(), 20000);
     try {
-      const response = await fetch(scope + path, {
+      const response = await fetch(apiRequestUrl(scope + path), {
         method: operation === undefined ? 'GET' : 'POST', headers: apiHeaders(), credentials: 'include',
         redirect: 'manual', cache: 'no-store', signal: controller.signal,
         ...(operation === undefined ? {} : { body: JSON.stringify(operation) })
@@ -841,8 +894,9 @@ if (!FEATURES.conversation) {
     if (!syncInitialized || !engine || activeScope !== initialScope) return;
     state.items = engine.view('card');
     state.archives = sortArchives(engine.view('document').map(normalizeArchive));
-    state.resources = engine.view('resource');
-    const settings = engine.view('settings').find(item => item.id === 'resources');
+    const resources = resourceEngine();
+    state.resources = resources.view('resource');
+    const settings = resources.view('settings').find(item => item.id === 'resources');
     state.resourceLanguages = settings?.languages || [];
     state.resourceGroups = settings?.groups || [];
     state.resourceTypes = settings?.types || [];
@@ -862,7 +916,8 @@ if (!FEATURES.conversation) {
   }
 
   function editableSyncRecord(entity, id, data) {
-    const row = engine?.view(entity).find(item => String(item.id) === String(id));
+    const instance = ['resource', 'settings'].includes(entity) ? resourceEngine() : engine;
+    const row = instance?.view(entity).find(item => String(item.id) === String(id));
     if (data?._syncCandidate || row?._syncCandidate) {
       notify('这份内容需要先确认，请到“设置 → 同步”选择要保留的版本。当前输入已保留。', 'error');
       return false;
@@ -876,12 +931,11 @@ if (!FEATURES.conversation) {
       ...Object.fromEntries(fields.filter(key => JSON.stringify(data[key]) !== JSON.stringify(original[key])).map(key => [key, data[key]])) };
   }
 
-  async function commitSync(change) {
-    if (!syncInitialized || !engine || activeScope !== initialScope) {
+  async function commitSync(change, instance = engine) {
+    if (!syncInitialized || !instance || activeScope !== initialScope) {
       notify('同步存储尚未就绪，操作未保存；请保留当前输入。', 'error');
       return false;
     }
-    const instance = engine;
     try {
       await change(instance);
     } catch (error) {
@@ -890,7 +944,7 @@ if (!FEATURES.conversation) {
       return false;
     }
     applySyncProjection();
-    $('#saveStatus').textContent = syncSummary();
+    renderSaveStatus(state.localSavedAt ? 'saved' : 'idle');
     // 写入后安排同步；save、投影和渲染仍不触发网络。
     scheduleSyncFlush(instance);
     return true;
@@ -914,7 +968,7 @@ if (!FEATURES.conversation) {
   function scheduleSyncFlush(instance = engine) {
     clearTimeout(flushTimer);
     flushTimer = setTimeout(() => {
-      if (engine !== instance || !instance?.status().pending) return;
+      if (![engine, collectionsEngine, collectionsRecoveryEngine].includes(instance) || !instance?.status().pending) return;
       if (syncBusy) { flushAfterSync = true; return; }
       if (canAutoSync()) void pushAllToCloud();
     }, 150);
@@ -938,15 +992,17 @@ if (!FEATURES.conversation) {
       if (announce) notify('尚未连接云端，本机内容已保留。');
       return false;
     }
-    const instance = engine;
+    const instances = [engine, collectionsEngine, collectionsRecoveryEngine].filter(Boolean);
     syncBusy = true;
     lastSyncAttempt = Date.now();
     updateSyncIndicator();
     try {
-      const status = await instance.sync();
-      if (instance !== engine || activeScope !== initialScope) return false;
+      const statuses = [];
+      for (const instance of instances) statuses.push(await instance.sync());
+      if (instances[0] !== engine || activeScope !== initialScope) return false;
       syncFailure = '';
-      const success = isApiOnline() && status.ready && !status.error && !status.pending && !status.conflicts && !status.candidates && !status.epochChanged;
+      const status = combinedSyncStatus();
+      const success = isApiOnline() && status?.ready && !status.error && !status.pending && !status.conflicts && !status.candidates && !status.epochChanged;
       syncBusy = false;
       if (announce) notify(syncSummary(status), success ? 'success' : 'info');
       return success;
@@ -955,11 +1011,14 @@ if (!FEATURES.conversation) {
       if (announce) notify('同步未完成，本机内容已保留，请稍后重试。', 'error');
       return false;
     } finally {
-      if (instance === engine) {
+      if (instances[0] === engine) {
         syncBusy = false;
         applySyncProjection();
-        const status = instance.status();
-        if (flushAfterSync && !syncFailure && !status.error && !status.epochChanged && !status.conflicts) scheduleSyncFlush(instance);
+        const status = combinedSyncStatus();
+        if (flushAfterSync && !syncFailure && !status.error && !status.epochChanged && !status.conflicts) {
+          const pendingInstance = instances.find(candidate => candidate.status().pending);
+          if (pendingInstance) scheduleSyncFlush(pendingInstance);
+        }
         flushAfterSync = false;
       }
     }
@@ -1023,6 +1082,30 @@ if (!FEATURES.conversation) {
   // 本地存储 + 渲染
   // ══════════════════════════════════════════════════
 
+  function renderSaveStatus(kind = 'saved', detail = '') {
+    const status = $('#saveStatus');
+    if (!status) return;
+    const english = state.displayLanguage === 'en';
+    const savedAt = new Date(state.localSavedAt || Date.now());
+    const savedTime = new Intl.DateTimeFormat(english ? 'en-GB' : 'zh-CN', {
+      hour: '2-digit', minute: '2-digit', hour12: false
+    }).format(savedAt);
+    const copy = detail || ({
+      saved: `${english ? 'Saved' : '已保存'} ${savedTime}`,
+      editing: english ? 'Editing' : '编辑中',
+      idle: english ? 'Not saved' : '尚未保存',
+      error: english ? 'Save failed' : '保存失败',
+    }[kind] || (english ? 'Not saved' : '尚未保存'));
+    const dot = document.createElement('span');
+    dot.className = 'local-save-dot';
+    dot.setAttribute('aria-hidden', 'true');
+    const text = document.createElement('span');
+    text.className = 'save-status-copy';
+    text.textContent = copy;
+    status.dataset.state = kind;
+    status.replaceChildren(dot, text);
+  }
+
   function save() {
     if (!syncInitialized || activeScope !== initialScope) return false;
     state.title = $('#docTitle').value;
@@ -1033,10 +1116,10 @@ if (!FEATURES.conversation) {
     try {
       localStorage.setItem(key, JSON.stringify(state));
       if (++saveCounter % 20 === 0) snapshotBackup('auto');
-      $('#saveStatus').textContent = '本地已保存 ' + new Intl.DateTimeFormat(state.displayLanguage === 'en' ? 'en-US' : 'zh-CN', { hour: '2-digit', minute: '2-digit' }).format(new Date(state.localSavedAt));
+      renderSaveStatus('saved');
       return true;
     } catch (error) {
-      $('#saveStatus').textContent = '本地保存失败';
+      renderSaveStatus('error');
       notify('本地空间不足，内容未保存。请先导出备份后清理浏览器数据。', 'error');
       return false;
     }
@@ -1092,7 +1175,7 @@ if (!FEATURES.conversation) {
     $('#audioPanel').hidden = true;
     $('#mediaSwitcher').hidden = true;
     setSaveModeUI();
-    $('#saveStatus').textContent = message;
+    renderSaveStatus('idle', message);
     renderVideo();
     renderAudio();
     applyEditorMode();
@@ -1117,7 +1200,7 @@ if (!FEATURES.conversation) {
     $('#audioPanel').hidden = true;
     $('#mediaSwitcher').hidden = true;
     setSaveModeUI();
-    $('#saveStatus').textContent = '正在编辑新文本';
+    renderSaveStatus('editing');
     renderVideo();
     renderAudio();
     applyEditorMode();
@@ -1672,7 +1755,7 @@ if (!FEATURES.conversation) {
       state.lastArchivedDate = document.document_date;
       clearCurrentEditor('本机已保存 · 等待同步');
       save(); render(); renderArchives();
-      $('#saveStatus').textContent = syncSummary();
+      renderSaveStatus('saved');
     } finally { documentSaveBusy = false; $('#workspace').inert = false; }
   }
 
@@ -2256,8 +2339,8 @@ if (!FEATURES.conversation) {
     $('#japaneseAnalyzerStatus').textContent = '正在分析分词、读音和词性…';
     $('#japaneseWordDetail').hidden = true;
     try {
-      const response = await fetch(apiConfig.baseUrl + '/api/japanese/analyze', {
-        method: 'POST', headers: apiHeaders(), body: JSON.stringify({ text })
+      const response = await fetch(apiRequestUrl(apiConfig.baseUrl + '/api/japanese/analyze'), {
+        method: 'POST', headers: apiHeaders(), credentials: 'include', body: JSON.stringify({ text })
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || '日语解析暂时不可用。');
@@ -2286,8 +2369,8 @@ if (!FEATURES.conversation) {
     detail.hidden = false;
     detail.innerHTML = '<p>正在查询词语详情…</p>';
     try {
-      const response = await fetch(apiConfig.baseUrl + '/api/japanese/word-detail', {
-        method: 'POST', headers: apiHeaders(), body: JSON.stringify({ word: token.word, sentence: japaneseAnalysis.sentence })
+      const response = await fetch(apiRequestUrl(apiConfig.baseUrl + '/api/japanese/word-detail'), {
+        method: 'POST', headers: apiHeaders(), credentials: 'include', body: JSON.stringify({ word: token.word, sentence: japaneseAnalysis.sentence })
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || '词语详情暂时不可用。');
@@ -2335,8 +2418,8 @@ if (!FEATURES.conversation) {
     button.disabled = true;
     button.textContent = '正在添加…';
     try {
-      const response = await fetch(apiConfig.baseUrl + '/api/japanese/reading', {
-        method: 'POST', headers: apiHeaders(), body: JSON.stringify({ text })
+      const response = await fetch(apiRequestUrl(apiConfig.baseUrl + '/api/japanese/reading'), {
+        method: 'POST', headers: apiHeaders(), credentials: 'include', body: JSON.stringify({ text })
       });
       if (!response.ok) {
         let message = '日语读音暂时不可用。';
@@ -2401,9 +2484,10 @@ if (!FEATURES.conversation) {
 
     try {
       const mode = /\s/.test(text) ? 'phrase' : 'word';
-      const res = await fetch(proxyUrl, {
+      const res = await fetch(apiRequestUrl(proxyUrl), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           text,
           sentence: sentenceForRange(range),
@@ -2515,6 +2599,7 @@ if (!FEATURES.conversation) {
     state.documentDate = $('#documentDate').value;
     save();
   };
+  $('#docTitle').addEventListener('input', save);
 
   if ($('#clearDoc')) $('#clearDoc').onclick = async () => {
     if (await confirmAction('清空当前编辑区？未保存内容将丢失，已收集词卡不会删除。', { title: '清空编辑区', confirmLabel: '清空' })) {
@@ -2570,12 +2655,20 @@ if (!FEATURES.conversation) {
         if (!await confirmAction('切换云端将重新载入页面。当前草稿与未同步修改会保留，不会自动复制到新云端。', { title: '切换云端', confirmLabel: '切换' })) return false;
         if (!save()) return false;
       }
-      const authRes = await fetch(baseUrl + '/api/auth', { method: 'POST', credentials: 'include', redirect: 'manual', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-      if (!authRes.ok || authRes.redirected || !/application\/json/i.test(authRes.headers.get('content-type') || '')) throw new Error('认证接口未返回有效 JSON，请检查登录状态和 Worker 地址。');
-      const { token } = await authRes.json();
+      const sessionRes = await fetch(apiRequestUrl(baseUrl + '/api/session'), {
+        method: 'GET', credentials: 'include', redirect: 'manual', cache: 'no-store',
+        headers: { Accept: 'application/json' },
+      });
+      if (!sessionRes.ok || sessionRes.redirected || !/application\/json/i.test(sessionRes.headers.get('content-type') || '')) {
+        throw new Error('请先在 Worker 地址完成 Cloudflare Access 登录，再返回这里重试。');
+      }
+      const session = await sessionRes.json();
+      if (!session.authenticated || typeof session.email !== 'string' || !session.email) {
+        throw new Error('Cloudflare Access 会话无效，请重新登录。');
+      }
       stopSyncNetwork();
       if (syncBusy && engine) await engine.sync();
-      apiConfig = { baseUrl, secret: token || '' };
+      apiConfig = { baseUrl, email: session.email };
       localStorage.setItem(apiKey, JSON.stringify(apiConfig));
       localStorage.setItem(scopeKey, baseUrl);
       if (switching) {
@@ -2588,7 +2681,7 @@ if (!FEATURES.conversation) {
       return await connectAndSync();
     } catch (error) {
       syncFailure = '连接未完成';
-      notify('暂未连上云端，请检查连接设置后重试。本机内容已保留。', 'error');
+      notify(error?.message || '暂未连上云端，请检查连接设置后重试。本机内容已保留。', 'error');
       updateSyncIndicator();
       return false;
     }
@@ -2616,7 +2709,7 @@ if (!FEATURES.conversation) {
     e.preventDefault();
     stopSyncNetwork();
     localStorage.setItem(scopeKey, activeScope);
-    apiConfig = { baseUrl: '', secret: '' };
+    apiConfig = { baseUrl: '', email: '' };
     localStorage.removeItem(apiKey);
     sessionStorage.removeItem(apiKey);
     updateSyncIndicator();
@@ -2666,8 +2759,15 @@ if (!FEATURES.conversation) {
 
   function exportFullBackup() {
     if (!engine) return notify('同步存储未就绪，请先保留浏览器本机数据。', 'error');
-    downloadJson({ version: 2, savedAt: new Date().toISOString(), scope: activeScope,
-      state: { ...state, html: editorHTML(), title: $('#docTitle').value }, sync: engine.exportBackup(), migration }, 'notebook-backup-v2');
+    downloadJson({
+      version: 3,
+      savedAt: new Date().toISOString(),
+      scope: activeScope,
+      state: { ...state, html: editorHTML(), title: $('#docTitle').value },
+      sync: engine.exportBackup(),
+      ...(collectionsSyncClient() ? { collectionsSync: collectionsSyncClient().exportBackup() } : {}),
+      migration,
+    }, 'notebook-backup-v3');
   }
   $('#downloadBackup').onclick = exportFullBackup;
   $('#exportSyncBackup').onclick = exportFullBackup;
@@ -2681,17 +2781,43 @@ if (!FEATURES.conversation) {
     try {
       if (file.size > 50 * 1024 * 1024) throw new Error('备份超过 50 MB，请先拆分或保留原文件');
       const payload = JSON.parse(await file.text());
-      const scopes = [payload?.scope, payload?.sync?.scope, payload?.state?.scope].filter(value => typeof value === 'string' && value);
-      const different = scopes.some(value => normalizeScope(value) !== scope);
+      const scopes = [payload?.scope, payload?.sync?.scope, payload?.collectionsSync?.scope, payload?.state?.scope]
+        .filter(value => typeof value === 'string' && value);
+      const different = !scopes.length || scopes.some(value => normalizeScope(value) !== scope);
       const message = different
         ? '这份备份来自其他云端服务。读取后，你可以逐项确认是否添加为独立内容；不会覆盖现有内容。'
         : '先读取并保留备份，再由你确认要使用的内容。不会自动上传，也不会覆盖正在编辑的草稿。';
       if (!await confirmAction(message, { title: '从文件恢复', confirmLabel: '读取备份' })) return;
       if (engine !== instance || activeScope !== scope) return;
-      const result = await instance.stageBackup(payload, { allowDifferentScope: different });
+      // 只有 active Collections 才拆分恢复。retired/recovery 客户端不承载当前
+      // Resources UI；此时整份备份必须进入 Notebook 引擎，配置才可见且可导入。
+      const collectionInstance = collectionsEngine;
+      const result = await instance.stageBackup(payload, {
+        allowDifferentScope: different,
+        ...(collectionInstance ? {
+          entities: ['card', 'document'],
+          includeSettings: false,
+          includeDrafts: true,
+        } : {}),
+      });
+      let collectionsResult = null;
+      if (collectionInstance) {
+        const collectionsPayload = payload.collectionsSync
+          ? { version: payload.version, scope: payload.scope, sync: payload.collectionsSync, state: payload.state }
+          : payload;
+        collectionsResult = await collectionInstance.stageBackup(collectionsPayload, {
+          allowDifferentScope: different,
+          entities: ['resource'],
+          includeSettings: true,
+          includeDrafts: false,
+        });
+      }
       input.value = '';
       applySyncProjection();
-      $('#backupRestoreStatus').textContent = result.duplicate ? '这份备份已经保留，没有重复添加。' : `备份已保留，${result.added ? `有${result.added}项需要确认` : '没有新增需要确认的内容'}。请在“备份与已删除内容”中查看。${result.drafts ? '草稿也已保留，可单独下载。' : ''}`;
+      const added = result.added + (collectionsResult?.added || 0);
+      $('#backupRestoreStatus').textContent = result.duplicate && (!collectionsResult || collectionsResult.duplicate)
+        ? '这份备份已经保留，没有重复添加。'
+        : `备份已保留，${added ? `有${added}项需要确认` : '没有新增需要确认的内容'}。请在“备份与已删除内容”中查看。${result.drafts ? '草稿也已保留，可单独下载。' : ''}`;
     } catch (error) {
       $('#backupRestoreStatus').textContent = error instanceof SyntaxError ? '无法读取这份备份，请确认选择了本应用的备份文件。文件选择和现有内容已保留。' : '恢复未完成，请检查备份文件后重试。文件选择和现有内容已保留。';
       notify($('#backupRestoreStatus').textContent, 'error');
@@ -2701,27 +2827,47 @@ if (!FEATURES.conversation) {
   $('#syncPanelFlush').onclick = () => pushAllToCloud({ announce: true });
 
   function legacySettingsPanel() {
-    const current = engine.view('settings').find(item => item.id === 'resources') || { languages: [], groups: [], types: [] };
-    return engine.settingsSources().map(source => {
-      const lists = ['languages', 'groups', 'types'].map(key => {
-        const noun = { languages: '语言', groups: '分组', types: '类型' }[key];
-        const rows = source.settings[key].map((item, index) => {
-          const exists = current[key].find(value => value.id === item.id) || current[key].find(value => value.name === item.name);
+    const active = resourceEngine();
+    const sources = [
+      { instance: active, engineKey: collectionsEngine ? 'collections' : 'notebook' },
+      ...(collectionsRecoveryEngine && collectionsRecoveryEngine !== active
+        ? [{ instance: collectionsRecoveryEngine, engineKey: 'collections' }]
+        : []),
+    ];
+    return sources.flatMap(({ instance, engineKey }) => {
+      const current = instance.view('settings').find(item => item.id === 'resources') ||
+        { languages: [], groups: [], types: [], tags: [], decks: [] };
+      return instance.settingsSources().map(source => {
+      const lists = ['languages', 'groups', 'types', 'tags', 'decks'].map(key => {
+        const noun = { languages: '语言', groups: '旧分组', types: '类型', tags: '标签', decks: '收藏册' }[key];
+        const rows = (source.settings[key] || []).map((item, index) => {
+          const exists = (current[key] || []).find(value => value.id === item.id) || (current[key] || []).find(value => value.name === item.name);
           const invalid = typeof item.name !== 'string' || !item.name.trim() || key === 'languages' && item.name === '不限语言';
           const inputKey = `${source.id}:${key}:${index}`;
-          const groupOptions = key === 'types' ? `<label>导入后的分组<select data-legacy-group="${esc(item.id)}" data-input-key="${esc(inputKey)}:group"><option value="">请选择分组</option>${current.groups.map(group => `<option value="${esc(JSON.stringify({ current: group.id }))}">${esc(group.name)}（当前）</option>`).join('')}${source.settings.groups.map(group => `<option value="${esc(JSON.stringify({ source: group.id }))}">${esc(group.name)}（须同时勾选旧分组）</option>`).join('')}</select></label>` : '';
-          return `<div><label><input type="checkbox" data-legacy-kind="${key}" data-legacy-id="${esc(item.id)}" data-input-key="${esc(inputKey)}" ${exists || invalid ? 'disabled' : ''}>${noun}：<span data-archive-user-content>${esc(item.name ?? '无名称')}</span></label>${exists ? `<p>已存在“${esc(exists.name)}”，保留当前命名，不覆盖。</p>` : invalid ? '<p>原值已备份，请到资源设置手动创建有效名称。</p>' : groupOptions}</div>`;
+          return `<div><label><input type="checkbox" data-legacy-kind="${key}" data-legacy-id="${esc(item.id)}" data-input-key="${esc(inputKey)}" ${exists || invalid ? 'disabled' : ''}>${noun}：<span data-archive-user-content>${esc(item.name ?? '无名称')}</span></label>${exists ? `<p>已存在“${esc(exists.name)}”，保留当前命名，不覆盖。</p>` : invalid ? '<p>原值已备份，请到资源设置手动创建有效名称。</p>' : ''}</div>`;
         }).join('');
-        return `<h4>旧${noun}</h4>${rows || '<p>无</p>'}`;
+        const removals = (source.removals?.[key] || []).map((item, index) => {
+          const exists = (current[key] || []).find(value => value.id === item.id);
+          const removable = exists && !source.asCopy;
+          const inputKey = `${source.id}:remove:${key}:${index}`;
+          const note = source.asCopy
+            ? '来自其他云端，只保留删除记录，不会删除当前配置。'
+            : exists
+              ? '勾选后会按同一稳定 ID 显式移除；仍被资源引用时会安全停止。'
+              : '当前同一 ID 已不存在，不需要再次移除。';
+          return `<div><label><input type="checkbox" data-legacy-remove-kind="${key}" data-legacy-remove-id="${esc(item.id)}" data-input-key="${esc(inputKey)}" ${removable ? '' : 'disabled'}>恢复移除${noun}：<span data-archive-user-content>${esc(item.name)}</span></label><p>${note}</p></div>`;
+        }).join('');
+        return `<h4>旧${noun}</h4>${rows || '<p>无待添加项</p>'}${removals}`;
       }).join('');
-      return `<details data-panel-key="settings:${esc(source.id)}" data-settings-source="${esc(source.id)}"><summary>${source.id === 'legacy' ? '找回本机的语言、分组和类型' : '找回备份中的语言、分组和类型'}</summary><p>只添加勾选的缺失项目，不改动现有名称。完成同步后，就可以用于恢复资源。</p>${lists}<button class="btn" type="button" data-sync-action="import-settings" data-sync-id="${esc(source.id)}">添加所选项目</button></details>`;
+        return `<details data-panel-key="${engineKey}:settings:${esc(source.id)}" data-settings-source="${esc(source.id)}" data-sync-engine="${engineKey}"><summary>${source.id === 'legacy' ? '找回本机的资源配置' : '找回备份中的资源配置'}</summary><p>会记录同名项目的 ID 映射，只添加勾选的缺失项目；删除命令必须单独勾选恢复。完成同步后，就可以用于恢复资源。</p>${lists}<button class="btn" type="button" data-sync-action="import-settings" data-sync-id="${esc(source.id)}">确认映射与所选项目</button></details>`;
+      });
     }).join('');
   }
 
-  function candidateResourceMapping(candidate, backup = engine.exportBackup()) {
+  function candidateResourceMapping(candidate, backup = resourceEngine().exportBackup(), instance = resourceEngine()) {
     const confirmed = backup.base[JSON.stringify(['settings', 'resources'])];
     const config = confirmed && !confirmed.deleted ? confirmed.data : {};
-    const sources = engine.settingsSources().filter(source => candidate.sourceId ? source.id.startsWith(candidate.sourceId + ':') : source.id === 'legacy');
+    const sources = instance.settingsSources().filter(source => candidate.sourceId ? source.id.startsWith(candidate.sourceId + ':') : source.id === 'legacy');
     const match = (key, value, extraName) => {
       const valid = config[key] || [];
       const direct = valid.find(item => item.id === value);
@@ -2736,6 +2882,35 @@ if (!FEATURES.conversation) {
       type: match('types', data.type),
       language_id: !data.language_id && (!languageName || languageName === '不限语言') ? null : match('languages', data.language_id, languageName)
     };
+  }
+
+  function collectionsSyncRecoveryHtml() {
+    const instance = collectionsSyncClient();
+    if (!instance) return '';
+    const { candidates, conflicts, commands } = instance.details();
+    const backup = instance.exportBackup();
+    const label = value => esc(String(value?.data?.name || value?.name || value?.data?.title || value?.title || '未命名资源').slice(0, 100));
+    const action = (name, id, text, disabled = false, entity = '') =>
+      `<button class="btn" type="button" data-sync-action="${name}" data-sync-id="${esc(id)}" ${entity ? `data-sync-entity="${esc(entity)}"` : ''} ${disabled ? 'disabled' : ''}>${text}</button>`;
+    const candidateRows = candidates.map(item => {
+      const remote = backup.base[JSON.stringify([item.entity, item.entityId])] || null;
+      if (remote && !item.asCopy) {
+        return `<details data-panel-key="collections-candidate:${esc(item.id)}"><summary><span data-archive-user-content>${label(item)}</span> · 资源版本需要确认</summary><p>云端已有同一 ID 的资源。请选择保留云端版本，或在云端未删除时使用备份版本。</p><div class="settings-actions">${action('candidate-remote', item.id, '保持云端这份')}${action('candidate-local', item.id, '使用备份这份', remote.deleted)}</div></details>`;
+      }
+      const mapping = item.entity === 'resource' ? candidateResourceMapping(item, backup, instance) : null;
+      const invalid = item.entity !== 'resource' || !mapping?.type || mapping.language_id === undefined;
+      return `<details data-panel-key="collections-candidate:${esc(item.id)}"><summary><span data-archive-user-content>${label(item)}</span> · 待恢复资源</summary><p>${item.asCopy ? '这份内容来自其他云端，确认后会使用新 ID 创建副本。' : '这份内容只在备份中，确认后会保留原 ID。'}</p>${invalid ? '<p class="small">请先在资源设置中补齐对应的 Type 与 Language，再恢复。</p>' : ''}<div class="settings-actions">${action('import', item.id, item.asCopy ? '添加为副本' : '恢复到同步', invalid)}${action('discard', item.id, '暂不使用')}</div></details>`;
+    }).join('');
+    const conflictRows = conflicts.map(item =>
+      `<details data-panel-key="collections-conflict:${esc(item.id)}"><summary><span data-archive-user-content>${label(item.local || item.remote)}</span> · 资源冲突</summary><p>本机修改和云端版本发生冲突。云端已删除时不能通过冲突处理隐式恢复。</p><div class="settings-actions">${action('remote', item.id, '保持云端这份')}${action('local', item.id, '使用本机修改', item.remote?.deleted)}</div></details>`).join('');
+    const tombstones = Object.values(backup.base).filter(item => item.entity === 'resource' && item.deleted &&
+      !instance.view('resource').some(row => row.id === item.id && !row._syncCandidate));
+    const tombstoneRows = tombstones.map(item =>
+      `<details data-panel-key="collections-deleted:${esc(item.id)}"><summary>已删除资源 · <span data-archive-user-content>${label(item)}</span></summary><p>恢复会沿用原 Resource ID、Type、Tags 与 Decks 关联。</p>${action('restore', item.id, '恢复这份资源', backup.epochChanged || conflicts.some(conflict => conflict.entityId === item.id), 'resource')}</details>`).join('');
+    const commandRows = (commands || []).filter(item => item.paused).map(item =>
+      `<details data-panel-key="collections-command:${esc(item.token)}"><summary>批量操作已暂停 · ${esc(item.command?.command || 'Collections')}</summary><p>${esc(item.failure?.message || '关联配置或远端状态已变化。')} 修正后可以重试；放弃只移除这条本机命令，不会删除资源。</p><div class="settings-actions">${action('retry-command', item.token, '重试命令')}${action('discard-command', item.token, '放弃命令')}</div></details>`).join('');
+    if (!candidateRows && !conflictRows && !tombstoneRows && !commandRows) return '';
+    return `<details class="sync-recovery" data-panel-key="collections-recovery" data-sync-engine="collections"><summary>Collections 恢复与冲突${candidates.length + conflicts.length ? ` · ${candidates.length + conflicts.length} 项待确认` : ''}</summary>${candidateRows}${conflictRows}${commandRows}${tombstoneRows}</details>`;
   }
 
   function renderSyncPanel() {
@@ -2800,7 +2975,10 @@ if (!FEATURES.conversation) {
     const tombstonesHtml = tombstones.map(item => `<details data-panel-key="deleted:${esc(item.entity)}:${esc(item.id)}"><summary>已删除 · <span data-archive-user-content>${esc(name(item.data))}</span></summary>${info(item)}<button class="btn" type="button" data-sync-action="restore" data-sync-id="${esc(item.id)}" data-sync-entity="${esc(item.entity)}" ${backup.epochChanged || conflicts.some(conflict => conflict.entity === item.entity && conflict.entityId === item.id) ? 'disabled' : ''}>恢复这份内容</button></details>`).join('');
     const preserved = (backup.stagedBackups || []).map((item, index) => `<details data-panel-key="backup:${esc(item.id)}"><summary>保留的备份 ${index + 1}</summary>${button('export-backup', item.id, '下载原备份')}${item.drafts.length ? `<p>保留了 ${item.drafts.length} 份草稿，不会覆盖正在编辑的内容。</p>${button('export-drafts', item.id, '下载保留的草稿')}` : ''}</details>`).join('');
     const older = Object.values(backup.preservedCandidates || {}).map((item, index) => `<details data-panel-key="preserved:${index}"><summary>保留的旧版本 · <span data-archive-user-content>${esc(name(item.data))}</span></summary>${info(item)}${button('export-preserved', String(index), '下载这份备份')}</details>`).join('');
-    panel.innerHTML = candidatesHtml + conflictsHtml + `<details class="sync-recovery" data-panel-key="recovery"><summary>备份与已删除内容${backupCandidates ? ' · 有内容需要确认' : ''}</summary><p>旧版本和已删除内容在这里查看。保存时间仅供参考，不一定是实际编辑时间。</p>${backupCandidates}${legacySettingsPanel()}${tombstonesHtml}${preserved}${older}<details data-panel-key="recovery-download"><summary>完整恢复资料</summary><p>包含保留的原始内容和同步记录，仅供下载，不会改动现有内容。</p>${button('export-recovery', '', '下载完整备份')}</details></details>`;
+    const epochRecovery = combinedSyncStatus()?.epochChanged
+      ? `<details class="sync-recovery" data-panel-key="epoch-recovery" open><summary>云端同步世代已变化</summary><p>先下载完整备份，再明确接受新的云端基线。旧队列会保留在备份中，不会静默重放。</p><button class="btn danger" type="button" data-sync-action="resolve-epoch" data-sync-engine="all">下载备份并接受新基线</button></details>`
+      : '';
+    panel.innerHTML = epochRecovery + candidatesHtml + conflictsHtml + collectionsSyncRecoveryHtml() + `<details class="sync-recovery" data-panel-key="recovery"><summary>备份与已删除内容${backupCandidates ? ' · 有内容需要确认' : ''}</summary><p>旧版本和已删除内容在这里查看。保存时间仅供参考，不一定是实际编辑时间。</p>${backupCandidates}${legacySettingsPanel()}${tombstonesHtml}${preserved}${older}<details data-panel-key="recovery-download"><summary>完整恢复资料</summary><p>包含保留的原始内容和同步记录，仅供下载，不会改动现有内容。</p>${button('export-recovery', '', '下载完整备份')}</details></details>`;
     for (const input of panel.querySelectorAll('[data-input-key]')) {
       const previous = inputs.get(input.dataset.inputKey);
       if (!previous) continue;
@@ -2820,16 +2998,31 @@ if (!FEATURES.conversation) {
     const button = event.target.closest('[data-sync-action]');
     if (!button || syncPanelBusy || !engine) return;
     const action = button.dataset.syncAction, id = button.dataset.syncId;
-    const instance = engine, scope = activeScope;
-    const candidate = engine.details().candidates.find(item => item.id === id);
+    const engineKey = button.dataset.syncEngine || button.closest('[data-sync-engine]')?.dataset.syncEngine || 'notebook';
+    if (action === 'resolve-epoch') {
+      exportFullBackup();
+      if (!await confirmAction('完整备份已开始下载。确认已保存备份，并接受当前云端作为新的同步基线？', { title: '接受新同步基线', confirmLabel: '已保存备份，继续' })) return;
+      syncPanelBusy = true;
+      try {
+        for (const current of [engine, collectionsEngine, collectionsRecoveryEngine].filter(item => item?.status().epochChanged)) {
+          await current.resolveEpochChange({ backupConfirmed: true });
+        }
+        applySyncProjection();
+        await pushAllToCloud();
+      } finally { syncPanelBusy = false; renderSyncPanel(); }
+      return;
+    }
+    const instance = engineKey === 'collections' ? collectionsSyncClient() : engine, scope = activeScope;
+    if (!instance) return;
+    const candidate = instance.details().candidates.find(item => item.id === id);
     if (action === 'export-recovery') { exportFullBackup(); return; }
     if (action === 'export-preserved') {
-      const item = Object.values(engine.exportBackup().preservedCandidates || {})[Number(id)];
+      const item = Object.values(instance.exportBackup().preservedCandidates || {})[Number(id)];
       if (item) downloadJson({ version: 2, scope: activeScope, sync: { base: {}, queue: [], candidates: { [id]: item } } }, 'notebook-preserved-content');
       return;
     }
     if (action === 'export-backup' || action === 'export-drafts') {
-      const backup = engine.exportBackup().stagedBackups?.find(item => item.id === id);
+      const backup = instance.exportBackup().stagedBackups?.find(item => item.id === id);
       if (backup) downloadJson(action === 'export-backup' ? backup.payload : { version: 2, scope: backup.scope, drafts: backup.drafts }, action === 'export-backup' ? 'notebook-original-backup' : 'notebook-preserved-drafts');
       return;
     }
@@ -2846,12 +3039,12 @@ if (!FEATURES.conversation) {
     let mapping, selection;
     if (action === 'import') {
       if (!candidate) return notify('这份内容已处理，请查看最新状态。');
-      const remote = engine.exportBackup().base[JSON.stringify([candidate.entity, candidate.entityId])];
+      const remote = instance.exportBackup().base[JSON.stringify([candidate.entity, candidate.entityId])];
       if (remote && !candidate.asCopy) return notify('云端已有这份内容，请选择要保留的版本。', 'error');
       if (candidate.entity === 'resource') {
-        mapping = candidateResourceMapping(candidate);
+        mapping = candidateResourceMapping(candidate, instance.exportBackup(), instance);
         const row = button.closest('[data-candidate-id]');
-        const typeInput = row.querySelector('[data-candidate-type]'), languageInput = row.querySelector('[data-candidate-language]');
+        const typeInput = row?.querySelector('[data-candidate-type]'), languageInput = row?.querySelector('[data-candidate-language]');
         if (typeInput || languageInput) {
           if (!typeInput?.value || !languageInput?.value) return notify('请在高级恢复中选择类型和语言。当前选择已保留。', 'error');
           mapping = { type: typeInput.value, language_id: languageInput.value === '__any__' ? null : languageInput.value };
@@ -2860,19 +3053,19 @@ if (!FEATURES.conversation) {
       }
     }
     if (action === 'import-settings') {
-      selection = { languages: [], groups: [], types: [], typeGroups: {} };
+      selection = {
+        languages: [], groups: [], types: [], tags: [], decks: [], typeGroups: {},
+        removals: { languages: [], groups: [], types: [], tags: [], decks: [] },
+      };
       const row = button.closest('[data-settings-source]');
       for (const input of row.querySelectorAll('[data-legacy-kind]:checked:not(:disabled)')) selection[input.dataset.legacyKind].push(input.dataset.legacyId);
-      if (!selection.languages.length && !selection.groups.length && !selection.types.length) return notify('请先勾选需要导入的缺失配置。');
-      for (const select of row.querySelectorAll('[data-legacy-group]')) {
-        if (!selection.types.includes(select.dataset.legacyGroup)) continue;
-        if (!select.value) return notify('请为每个勾选的类型选择分组；旧分组也需要同时勾选。', 'error');
-        Object.defineProperty(selection.typeGroups, select.dataset.legacyGroup, { value: JSON.parse(select.value), enumerable: true });
+      for (const input of row.querySelectorAll('[data-legacy-remove-kind]:checked:not(:disabled)')) {
+        selection.removals[input.dataset.legacyRemoveKind].push(input.dataset.legacyRemoveId);
       }
     }
     const messages = {
       import: candidate?.asCopy ? '将这份备份添加为独立内容？不会覆盖现有内容。' : '将这份内容添加到同步，在其他设备也能使用？',
-      'import-settings': '添加勾选的语言、分组和类型？不会改动现有名称。',
+      'import-settings': '记录同名配置映射，并应用勾选的新增或删除项？仍被资源引用的删除会安全停止。',
       discard: '暂不使用这份内容？不会删除云端内容，原备份仍保留。',
       'candidate-remote': '保持云端这份？本机的旧版本会保留在备份中。',
       'candidate-local': `${candidate?.sourceId ? '使用备份中的这份内容' : '使用本机这份内容'}更新云端？不会添加重复内容，也不会恢复已删除内容。`,
@@ -2880,11 +3073,23 @@ if (!FEATURES.conversation) {
       local: '使用本机这份修改更新云端？只更新改过的内容，不会恢复已删除内容。',
       restore: '恢复这份已删除的内容，并同步到其他设备？'
     };
+    if (action === 'retry-command' || action === 'discard-command') {
+      const confirmed = await confirmAction(action === 'retry-command'
+        ? '重新检查当前配置并重试这条批量命令？'
+        : '放弃这条本机批量命令？资源本身不会被删除。', {
+        title: action === 'retry-command' ? '重试批量命令' : '放弃批量命令',
+        confirmLabel: action === 'retry-command' ? '重试' : '放弃命令',
+      });
+      if (!confirmed) return;
+      const saved = await commitSync(client => action === 'retry-command' ? client.retryCommand(id) : client.discardCommand(id), instance);
+      if (saved && action === 'retry-command') scheduleSyncFlush(instance);
+      return;
+    }
     if (!messages[action]) return;
     syncPanelBusy = true;
     try {
       if (!await confirmAction(messages[action], { title: '确认同步操作', confirmLabel: '确认' })) return;
-      if (engine !== instance || activeScope !== scope) return;
+      if ((engineKey === 'collections' ? collectionsSyncClient() : engine) !== instance || activeScope !== scope) return;
       await commitSync(client => {
         if (action === 'candidate-local' || action === 'candidate-remote') {
           return client.resolveCandidate(id, action === 'candidate-local' ? 'local' : 'remote');
@@ -2900,7 +3105,7 @@ if (!FEATURES.conversation) {
         if (action === 'discard') return client.discardCandidate(id);
         if (action === 'restore') return client.restore(button.dataset.syncEntity, id);
         return client.resolveConflict(id, action);
-      });
+      }, instance);
     } finally { syncPanelBusy = false; renderSyncPanel(); }
   };
 
@@ -3047,7 +3252,7 @@ if (!FEATURES.conversation) {
   async function loadReviewPreferencesFromCloud() {
     if (!isApiOnline()) return;
     try {
-      const response = await fetch(apiConfig.baseUrl + '/api/review/preferences', { headers: apiHeaders() });
+      const response = await fetch(apiRequestUrl(apiConfig.baseUrl + '/api/review/preferences'), { headers: apiHeaders(), credentials: 'include' });
       if (!response.ok) return;
       const preferences = await response.json();
       if ([0, 10, 20, 30].includes(Number(preferences.batch_size))) state.reviewBatchSize = Number(preferences.batch_size);
@@ -3061,8 +3266,8 @@ if (!FEATURES.conversation) {
   async function saveReviewPreferencesToCloud() {
     if (!isApiOnline()) return false;
     try {
-      const response = await fetch(apiConfig.baseUrl + '/api/review/preferences', {
-        method: 'PUT', headers: apiHeaders(),
+      const response = await fetch(apiRequestUrl(apiConfig.baseUrl + '/api/review/preferences'), {
+        method: 'PUT', headers: apiHeaders(), credentials: 'include',
         body: JSON.stringify({ batch_size: state.reviewBatchSize, exercise_mode: state.reviewExerciseMode })
       });
       return response.ok;
@@ -3093,7 +3298,7 @@ if (!FEATURES.conversation) {
     if (!isApiOnline()) return;
     const key = reviewPlanKey();
     try {
-      const response = await fetch(apiConfig.baseUrl + '/api/review/plan?key=' + encodeURIComponent(key), { headers: apiHeaders() });
+      const response = await fetch(apiRequestUrl(apiConfig.baseUrl + '/api/review/plan?key=' + encodeURIComponent(key)), { headers: apiHeaders(), credentials: 'include' });
       if (!response.ok) return;
       const plan = await response.json();
       if (plan.plan_key === key && Array.isArray(plan.order) && plan.order.length) {
@@ -3108,8 +3313,8 @@ if (!FEATURES.conversation) {
   async function saveDailyReviewPlanToCloud() {
     if (!isApiOnline() || !state.dailyReviewPlan) return false;
     try {
-      const response = await fetch(apiConfig.baseUrl + '/api/review/plan', {
-        method: 'PUT', headers: apiHeaders(),
+      const response = await fetch(apiRequestUrl(apiConfig.baseUrl + '/api/review/plan'), {
+        method: 'PUT', headers: apiHeaders(), credentials: 'include',
         body: JSON.stringify({ plan_key: state.dailyReviewPlan.key, order: state.dailyReviewPlan.order })
       });
       return response.ok;
@@ -3521,8 +3726,8 @@ if (!FEATURES.conversation) {
     $('#sendChat').disabled = true;
     $('#sendChat').textContent = '思考中…';
     try {
-      const response = await fetch(apiConfig.baseUrl + '/api/conversation', {
-        method: 'POST', headers: apiHeaders(), body: JSON.stringify({
+      const response = await fetch(apiRequestUrl(apiConfig.baseUrl + '/api/conversation'), {
+        method: 'POST', headers: apiHeaders(), credentials: 'include', body: JSON.stringify({
           language: state.chatLanguage, mode: state.chatMode, scenario: state.chatScenario,
           correction_mode: state.correctionMode, ui_language: state.displayLanguage, messages: messages.slice(-16).map(({ role, content }) => ({ role, content })),
         }),
@@ -3610,8 +3815,8 @@ if (!FEATURES.conversation) {
     const fallback = fallbackConversationTitle(messages);
     if (!isApiOnline()) return fallback;
     try {
-      const response = await fetch(apiConfig.baseUrl + '/api/conversation/title', {
-        method: 'POST', headers: apiHeaders(),
+      const response = await fetch(apiRequestUrl(apiConfig.baseUrl + '/api/conversation/title'), {
+        method: 'POST', headers: apiHeaders(), credentials: 'include',
         body: JSON.stringify({ language: state.chatLanguage, messages: messages.slice(0, 12).map(({ role, content }) => ({ role, content })) }),
       });
       if (!response.ok) return fallback;
@@ -3682,6 +3887,15 @@ if (!FEATURES.conversation) {
   const resourceStatusNames = { backlog: '待看', active: '进行中', completed: '已完成' };
   const resourceComposer = $('#resourceComposer');
   const selectedResourceIds = new Set();
+  const resourceDraftTagIds = new Set();
+  const resourceDraftDeckIds = new Set();
+  const resourceFilterTagIds = new Set();
+  const resourceFilterDeckIds = new Set();
+  const editingResourceConfigKeys = new Set();
+  let visibleResources = [];
+  let activeResourceDeckId = '';
+  let resourceBatchBusy = false;
+  let resourceComposerBaseline = null;
   const resourceEmojiPicker = $('#resourceEmojiPicker');
   const resourceEmojiCategories = [
     { id: 'recent', icon: '◷', name: '最近使用', emojis: [] },
@@ -3702,7 +3916,32 @@ if (!FEATURES.conversation) {
   const formatResourceDate = value => new Intl.DateTimeFormat(state.displayLanguage === 'en' ? 'en-US' : 'zh-CN', { dateStyle: 'medium' }).format(new Date(value));
   const resourceType = id => state.resourceTypes.find(type => type.id === id) || { id, name: id || '未分类', emoji: '' };
   const resourceTypeName = id => resourceType(id).name;
+  const normalizeSettingName = value => String(value || '').normalize('NFKC').trim().replace(/\s+/gu, ' ').toLocaleLowerCase('en-US');
   const defaultResourceEmoji = item => resourceType(item.type).emoji || ({ project: '📁', course: '🎓', website: '🌐', movie_series: '🎬', book: '📚', variety: '🎬', article: '📝', audio: '🎧', game: '🎮', other: '📌' }[item.type] || '🔖');
+  const initialResourceSettings = () => ({
+    id: 'resources',
+    schema_version: 4,
+    languages: [
+      { id: 'lang_72726d8818f693066ceb69afa364218b692e62ea92b385782363780f47529c21', name: '中文' },
+      { id: 'lang_ba118bf7fc9c1aedc1edb28a0aa86e0b43b681f222af6616e13c43be87815b06', name: 'English' },
+      { id: 'lang_77710aedc74ecfa33685e33a6c7df5cc83004da1bdcef7fb280f5c2b2e97e0a5', name: '日本語' },
+      { id: 'lang_8d5ee19ed855367529ebf96c02ae8b8bbf9bc77039c0f32a5cc6d4a0a9404ec0', name: 'Nederlands' },
+    ],
+    groups: [],
+    types: [
+      { id: 'movie_series', name: '影视', emoji: '🎬' },
+      { id: 'book', name: '书籍', emoji: '📚' },
+      { id: 'article', name: '文章', emoji: '📝' },
+      { id: 'audio', name: '音频', emoji: '🎧' },
+      { id: 'course', name: '课程', emoji: '🎓' },
+      { id: 'website', name: '网站 / 工具', emoji: '🌐' },
+      { id: 'project', name: '项目资料', emoji: '📁' },
+      { id: 'game', name: '游戏', emoji: '🎮' },
+      { id: 'other', name: '其他', emoji: '📌' },
+    ],
+    tags: [],
+    decks: [],
+  });
 
   function firstGrapheme(value) {
     const text = value.trim();
@@ -3754,60 +3993,222 @@ if (!FEATURES.conversation) {
   $('#removeResourceEmoji').onclick = () => setResourceEmoji('');
   $('#resourceType').addEventListener('change', () => { if (!$('#resourceEmojiValue').value) $('#resourceEmojiPreview').textContent = defaultResourceEmoji({ type: $('#resourceType').value }); });
 
+  const resourceTag = id => state.resourceTags.find(item => item.id === id) || { id, name: id, emoji: '' };
+  const resourceDeck = id => state.resourceDecks.find(item => item.id === id) || { id, name: id, emoji: '', description: '' };
+  const resourceTaxonomyName = (kind, id) => (kind === 'tag' ? resourceTag(id) : resourceDeck(id)).name;
+  function captureResourceFocus(root) {
+    const active = document.activeElement;
+    if (!active || !root?.contains(active)) return null;
+    const cardId = active.closest('[data-resource-id]')?.dataset.resourceId;
+    for (const attribute of [
+      'data-resource-draft-tag', 'data-resource-draft-deck',
+      'data-remove-resource-draft-tag', 'data-remove-resource-draft-deck',
+      'data-resource-filter-tag', 'data-resource-filter-deck', 'data-resource-deck',
+      'data-resource-action', 'data-resource-select', 'data-clear-resource-filter',
+    ]) {
+      if (!active.hasAttribute(attribute)) continue;
+      let selector = cardId ? `[data-resource-id="${CSS.escape(cardId)}"] ` : '';
+      selector += `[${attribute}="${CSS.escape(active.getAttribute(attribute) || '')}"]`;
+      if (attribute === 'data-clear-resource-filter') {
+        selector += `[data-filter-id="${CSS.escape(active.dataset.filterId || '')}"]`;
+      }
+      return selector;
+    }
+    return active.id ? `#${CSS.escape(active.id)}` : null;
+  }
+  const restoreResourceFocus = selector => {
+    if (selector) queueMicrotask(() => document.querySelector(selector)?.focus({ preventScroll: true }));
+  };
+
   function fillResourceOptions(force = false) {
-    const currentFilter = $('#resourceTypeFilter').value || 'all';
-    const grouped = state.resourceTypes.map(type => `<option value="${esc(type.id)}">${esc(type.emoji || '')}${type.emoji ? ' ' : ''}${esc(type.name)}</option>`).join('');
+    const currentTypeFilter = $('#resourceTypeFilter').value || 'all';
+    const currentLanguageFilter = $('#resourceLanguageFilter').value || 'all';
+    const typeOptions = state.resourceTypes.map(type => `<option value="${esc(type.id)}" data-archive-user-content>${esc(type.emoji || '')}${type.emoji ? ' ' : ''}${esc(type.name)}</option>`).join('');
+    const languageOptions = state.resourceLanguages.map(item => `<option value="${esc(item.id)}" data-archive-user-content>${esc(item.name)}</option>`).join('');
     if (force || resourceComposer.hidden) {
       const currentLanguage = $('#resourceLanguage').value;
-      $('#resourceLanguage').innerHTML = '<option value="">不限语言</option>' + state.resourceLanguages.map(item => `<option value="${esc(item.id)}">${esc(item.name)}</option>`).join('');
+      $('#resourceLanguage').innerHTML = '<option value="">不限语言</option>' + languageOptions;
       $('#resourceLanguage').value = state.resourceLanguages.some(item => item.id === currentLanguage) ? currentLanguage : '';
       const currentType = $('#resourceType').value;
-      $('#resourceType').innerHTML = grouped;
+      $('#resourceType').innerHTML = typeOptions;
       if (state.resourceTypes.some(type => type.id === currentType)) $('#resourceType').value = currentType;
     }
-    $('#resourceTypeFilter').innerHTML = '<option value="all">全部类型</option>' + grouped;
-    $('#resourceTypeFilter').value = currentFilter === 'all' || state.resourceTypes.some(type => type.id === currentFilter) ? currentFilter : 'all';
+    $('#resourceTypeFilter').innerHTML = '<option value="all">全部类型</option>' + typeOptions;
+    $('#resourceTypeFilter').value = currentTypeFilter === 'all' || state.resourceTypes.some(type => type.id === currentTypeFilter) ? currentTypeFilter : 'all';
+    $('#resourceLanguageFilter').innerHTML = '<option value="all">全部语言</option><option value="__none__">未指定语言</option>' + languageOptions;
+    $('#resourceLanguageFilter').value = currentLanguageFilter === 'all' || currentLanguageFilter === '__none__' ||
+      state.resourceLanguages.some(item => item.id === currentLanguageFilter) ? currentLanguageFilter : 'all';
   }
 
-  function resourceMatches(item) {
-    const query = $('#resourceSearch').value.trim().toLowerCase();
-    const topic = $('#resourceTopicFilter').value;
-    const type = $('#resourceTypeFilter').value;
-    const haystack = [item.name, item.topic, item.language, item.description, resourceTypeName(item.type)].join(' ').toLowerCase();
-    return (!query || haystack.includes(query)) && (topic === 'all' || item.topic === topic) && (type === 'all' || item.type === type);
+  function renderResourceDraftTaxonomy(kind) {
+    const focused = captureResourceFocus(resourceComposer);
+    const isTag = kind === 'tag';
+    const items = isTag ? state.resourceTags : state.resourceDecks;
+    const selected = isTag ? resourceDraftTagIds : resourceDraftDeckIds;
+    const search = $(isTag ? '#resourceTagSearch' : '#resourceDeckSearch').value.trim().toLocaleLowerCase();
+    const options = items.filter(item => !search || `${item.name} ${item.emoji || ''}`.toLocaleLowerCase().includes(search));
+    const optionTarget = $(isTag ? '#resourceTagOptions' : '#resourceDeckOptions');
+    const selectionTarget = $(isTag ? '#resourceTagSelection' : '#resourceDeckSelection');
+    const rawSearch = $(isTag ? '#resourceTagSearch' : '#resourceDeckSearch').value.trim();
+    const canCreate = isTag && rawSearch && !items.some(item => normalizeSettingName(item.name) === normalizeSettingName(rawSearch));
+    optionTarget.innerHTML = (canCreate ? `<button class="resource-taxonomy-create" type="button" data-create-resource-tag="${esc(rawSearch)}">＋ 创建“<span data-archive-user-content>${esc(rawSearch)}</span>”</button>` : '') +
+      (options.length
+        ? options.map(item => `<label><input type="checkbox" data-resource-draft-${kind}="${esc(item.id)}" ${selected.has(item.id) ? 'checked' : ''}><span data-archive-user-content>${item.emoji ? `${esc(item.emoji)} ` : ''}${esc(item.name)}</span></label>`).join('')
+        : canCreate ? '' : `<p class="small">没有匹配的${isTag ? '标签' : '收藏册'}。</p>`);
+    selectionTarget.innerHTML = [...selected].map(id => {
+      const item = isTag ? resourceTag(id) : resourceDeck(id);
+      return `<button type="button" data-remove-resource-draft-${kind}="${esc(id)}" aria-label="移除${isTag ? '标签' : '收藏册'}：${esc(item.name)}"><span data-archive-user-content>${item.emoji ? `${esc(item.emoji)} ` : ''}${esc(item.name)}</span> <span aria-hidden="true">×</span></button>`;
+    }).join('');
+    restoreResourceFocus(focused);
+  }
+
+  function resourceFilterState() {
+    return {
+      query: $('#resourceSearch').value.trim().toLocaleLowerCase(),
+      type: $('#resourceTypeFilter').value,
+      language: $('#resourceLanguageFilter').value,
+      status: $('#resourceStatusFilter').value,
+      topic: $('#resourceTopicFilter').value,
+      tags: new Set(resourceFilterTagIds),
+      decks: new Set(resourceFilterDeckIds),
+      activeDeck: activeResourceDeckId,
+      sort: $('#resourceSort').value,
+    };
+  }
+
+  function matchesMultiFacet(ids, selected) {
+    if (!selected.size) return true;
+    const values = new Set(ids || []);
+    return [...selected].some(id => id === '__none__' ? values.size === 0 : values.has(id));
+  }
+
+  function resourceMatches(item, filters = resourceFilterState()) {
+    const tagNames = (item.tag_ids || []).map(id => resourceTag(id).name);
+    const deckNames = (item.deck_ids || []).map(id => resourceDeck(id).name);
+    const haystack = [item.name, item.topic, item.language, item.description, resourceTypeName(item.type), ...tagNames, ...deckNames].join(' ').toLocaleLowerCase();
+    return (!filters.query || haystack.includes(filters.query)) &&
+      (filters.topic === 'all' || item.topic === filters.topic) &&
+      (filters.type === 'all' || item.type === filters.type) &&
+      (filters.language === 'all' || filters.language === '__none__' ? filters.language !== '__none__' || item.language_id == null : item.language_id === filters.language) &&
+      (filters.status === 'all' || item.status === filters.status) &&
+      matchesMultiFacet(item.tag_ids, filters.tags) &&
+      matchesMultiFacet(item.deck_ids, filters.decks) &&
+      (!filters.activeDeck || (item.deck_ids || []).includes(filters.activeDeck));
+  }
+
+  function sortResources(items, mode) {
+    const time = (item, field) => Number.isFinite(Date.parse(item[field])) ? Date.parse(item[field]) : 0;
+    return [...items].sort((a, b) => {
+      if (mode === 'name') return a.name.localeCompare(b.name, state.displayLanguage === 'en' ? 'en' : 'zh-CN');
+      if (mode === 'created') return time(b, 'created_at') - time(a, 'created_at') || a.name.localeCompare(b.name);
+      if (mode === 'completed') return time(b, 'completed_at') - time(a, 'completed_at') || time(b, 'updated_at') - time(a, 'updated_at');
+      return time(b, 'updated_at') - time(a, 'updated_at') || time(b, 'created_at') - time(a, 'created_at');
+    });
+  }
+
+  function renderResourceFacet(kind) {
+    const isTag = kind === 'tag';
+    const items = isTag ? state.resourceTags : state.resourceDecks;
+    const selected = isTag ? resourceFilterTagIds : resourceFilterDeckIds;
+    const target = $(isTag ? '#resourceTagFilter' : '#resourceDeckFilter');
+    const field = isTag ? 'tag_ids' : 'deck_ids';
+    const label = isTag ? '标签' : '收藏册';
+    const rows = [{ id: '__none__', name: isTag ? '无标签' : '未加入收藏册', emoji: '' }, ...items];
+    target.innerHTML = rows.map(item => {
+      const count = state.resources.filter(resource => item.id === '__none__' ? !(resource[field] || []).length : (resource[field] || []).includes(item.id)).length;
+      return `<label><input type="checkbox" data-resource-filter-${kind}="${esc(item.id)}" ${selected.has(item.id) ? 'checked' : ''}><span ${item.id === '__none__' ? '' : 'data-resource-user-content'}>${item.emoji ? `${esc(item.emoji)} ` : ''}${esc(item.name)} <small>${count}</small></span></label>`;
+    }).join('');
+    const summary = $(isTag ? '#resourceTagFilterLabel' : '#resourceDeckFilterLabel');
+    summary.textContent = selected.size ? `${label} · ${selected.size}` : label;
+  }
+
+  function renderResourceDeckNav() {
+    $('#resourceDeckNav').innerHTML = [
+      `<button type="button" class="${activeResourceDeckId ? '' : 'active'}" data-resource-deck="" aria-pressed="${String(!activeResourceDeckId)}">全部项目</button>`,
+      ...state.resourceDecks.map(deck => {
+        const count = state.resources.filter(item => (item.deck_ids || []).includes(deck.id)).length;
+        return `<button type="button" class="${activeResourceDeckId === deck.id ? 'active' : ''}" data-resource-deck="${esc(deck.id)}" aria-pressed="${String(activeResourceDeckId === deck.id)}"><span data-resource-user-content>${deck.emoji ? `${esc(deck.emoji)} ` : ''}${esc(deck.name)}</span> <small>${count}</small></button>`;
+      }),
+    ].join('');
+  }
+
+  function filterChip(label, kind, id = '') {
+    return `<button class="resource-filter-chip" type="button" data-clear-resource-filter="${esc(kind)}" data-filter-id="${esc(id)}" aria-label="移除筛选：${esc(label)}">${esc(label)} <span aria-hidden="true">×</span></button>`;
+  }
+
+  function renderResourceFilterChips(filters) {
+    const chips = [];
+    if (filters.query) chips.push(filterChip(`搜索：${$('#resourceSearch').value.trim()}`, 'query'));
+    if (filters.type !== 'all') chips.push(filterChip(`类型：${resourceTypeName(filters.type)}`, 'type'));
+    if (filters.language !== 'all') chips.push(filterChip(`语言：${filters.language === '__none__' ? '未指定' : state.resourceLanguages.find(item => item.id === filters.language)?.name || filters.language}`, 'language'));
+    if (filters.status !== 'all') chips.push(filterChip(`状态：${resourceStatusNames[filters.status]}`, 'status'));
+    if (filters.topic !== 'all') chips.push(filterChip(`旧主题：${filters.topic}`, 'topic'));
+    for (const id of filters.tags) chips.push(filterChip(`标签：${id === '__none__' ? '无标签' : resourceTag(id).name}`, 'tag', id));
+    for (const id of filters.decks) chips.push(filterChip(`收藏册：${id === '__none__' ? '未加入' : resourceDeck(id).name}`, 'deck', id));
+    if (filters.activeDeck) chips.push(filterChip(`收藏册视图：${resourceDeck(filters.activeDeck).name}`, 'activeDeck', filters.activeDeck));
+    $('#resourceFilterChips').innerHTML = chips.join('');
+    $('#clearResourceFilters').hidden = chips.length === 0;
   }
 
   function resourceRow(item) {
     const archived = item.status === 'completed';
     const safeUrl = safeResourceUrl(item.url);
-    const title = safeUrl ? `<a href="${esc(safeUrl)}" target="_blank" rel="noopener noreferrer">${esc(item.name)}</a>` : esc(item.name);
+    const title = safeUrl ? `<a href="${esc(safeUrl)}" target="_blank" rel="noopener noreferrer" data-resource-user-content>${esc(item.name)}</a>` : `<span data-resource-user-content>${esc(item.name)}</span>`;
     const type = resourceType(item.type);
     const emoji = item.emoji || defaultResourceEmoji(item);
-    return `<article class="resource-card${selectedResourceIds.has(item.id) ? ' selected' : ''}" data-resource-id="${esc(item.id)}" tabindex="0" aria-label="${esc(item.name)}，单击查看详情，双击编辑"><label class="resource-select"><input type="checkbox" data-resource-select ${selectedResourceIds.has(item.id) ? 'checked' : ''} aria-label="选择 ${esc(item.name)}"><span></span></label><span class="resource-card-icon" aria-hidden="true">${esc(emoji)}</span><div class="resource-card-body"><h3>${title}</h3>${item.description ? `<p class="resource-description">${esc(item.description)}</p>` : '<p class="resource-description muted">没有说明</p>'}<div class="resource-meta"><span class="resource-tag">${esc(type.name)}</span>${item.topic ? `<span>${esc(item.topic)}</span>` : ''}</div></div><div class="resource-card-footer"><span>${archived && item.completed_at ? `完成于 ${esc(formatResourceDate(item.completed_at))}` : esc(resourceStatusNames[item.status] || '')}</span><div class="resource-actions">${archived ? `<button class="btn" type="button" data-resource-action="restore">恢复</button>` : `${item.status === 'backlog' ? `<button class="btn" type="button" data-resource-action="start">开始</button>` : `<button class="btn" type="button" data-resource-action="backlog">稍后</button>`}<button class="btn primary" type="button" data-resource-action="complete">完成</button>`}</div></div></article>`;
+    const tags = (item.tag_ids || []).slice(0, 3).map(id => `<button type="button" class="resource-taxonomy-chip" data-resource-filter-tag="${esc(id)}" data-resource-user-content>${resourceTag(id).emoji ? `${esc(resourceTag(id).emoji)} ` : ''}${esc(resourceTag(id).name)}</button>`).join('');
+    const decks = (item.deck_ids || []).slice(0, 2).map(id => `<button type="button" class="resource-taxonomy-chip deck" data-resource-filter-deck="${esc(id)}" data-resource-user-content>${resourceDeck(id).emoji ? `${esc(resourceDeck(id).emoji)} ` : ''}${esc(resourceDeck(id).name)}</button>`).join('');
+    const overflow = Math.max(0, (item.tag_ids || []).length - 3) + Math.max(0, (item.deck_ids || []).length - 2);
+    return `<article class="resource-card${selectedResourceIds.has(item.id) ? ' selected' : ''}" data-resource-id="${esc(item.id)}"><label class="resource-select"><input type="checkbox" data-resource-select ${selectedResourceIds.has(item.id) ? 'checked' : ''} aria-label="选择 ${esc(item.name)}"><span></span></label><span class="resource-card-icon" aria-hidden="true">${esc(emoji)}</span><div class="resource-card-body"><h3>${title}</h3>${item.description ? `<p class="resource-description" data-resource-user-content>${esc(item.description)}</p>` : ''}<div class="resource-meta"><span class="resource-tag" data-resource-user-content>${esc(type.name)}</span>${item.language_id != null ? `<span data-resource-user-content>${esc(item.language)}</span>` : ''}<span>${esc(resourceStatusNames[item.status] || '')}</span></div><div class="resource-taxonomy-chips">${decks}${tags}${overflow ? `<span class="resource-chip-overflow">+${overflow}</span>` : ''}</div></div><div class="resource-card-footer"><span>${archived && item.completed_at ? `完成于 ${esc(formatResourceDate(item.completed_at))}` : ''}</span><div class="resource-actions"><button class="btn" type="button" data-resource-action="details">详情</button><button class="btn" type="button" data-resource-action="edit">编辑</button>${archived ? `<button class="btn" type="button" data-resource-action="restore">恢复</button>` : item.status === 'backlog' ? `<button class="btn primary" type="button" data-resource-action="start">开始</button>` : `<button class="btn" type="button" data-resource-action="backlog">稍后</button><button class="btn primary" type="button" data-resource-action="complete">完成</button>`}</div></div></article>`;
   }
 
   function renderResources() {
+    const focused = captureResourceFocus($('#resourcesView'));
     fillResourceOptions();
+    renderResourceDeckNav();
     const topics = [...new Set(state.resources.map(item => item.topic).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'zh-CN'));
     const currentTopic = $('#resourceTopicFilter').value || 'all';
-    $('#resourceTopicFilter').innerHTML = '<option value="all">全部主题</option>' + topics.map(topic => `<option value="${esc(topic)}">${esc(topic)}</option>`).join('');
+    $('#resourceTopicFilter').innerHTML = '<option value="all">全部旧主题</option>' + topics.map(topic => `<option value="${esc(topic)}" data-archive-user-content>${esc(topic)}</option>`).join('');
     $('#resourceTopicFilter').value = topics.includes(currentTopic) ? currentTopic : 'all';
     $('#resourceTopicSuggestions').innerHTML = topics.map(topic => `<option value="${esc(topic)}"></option>`).join('');
-    const visible = state.resources.filter(resourceMatches);
-    const active = visible.filter(item => item.status !== 'completed');
-    const archived = visible.filter(item => item.status === 'completed');
-    const resourceCount = $('#resourceCount');
-    if (resourceCount) resourceCount.textContent = state.resources.filter(item => item.status !== 'completed').length;
-    $('#resourceSummary').innerHTML = `<span><strong>${active.length}</strong> 项待处理</span><span><strong>${archived.length}</strong> 项已完成</span><span><strong>${topics.length}</strong> 个主题</span>`;
-    $('#resourceActiveList').innerHTML = active.length ? `<div class="resource-card-grid">${active.map(resourceRow).join('')}</div>` : '<div class="resource-empty">这里已经清空了。添加一个真正想看的资源吧。</div>';
-    $('#resourceArchiveList').innerHTML = archived.length ? `<div class="resource-card-grid">${archived.map(resourceRow).join('')}</div>` : '<div class="resource-empty">完成的资源会连同日期出现在这里。</div>';
-    $('#resourceSelectionBar').hidden = selectedResourceIds.size === 0;
-    $('#resourceSelectionCount').textContent = `已选 ${selectedResourceIds.size} 项`;
+    renderResourceFacet('tag');
+    renderResourceFacet('deck');
+    const filters = resourceFilterState();
+    visibleResources = sortResources(state.resources.filter(item => resourceMatches(item, filters)), filters.sort);
+    const visibleIds = new Set(visibleResources.map(item => item.id));
+    for (const id of selectedResourceIds) if (!visibleIds.has(id)) selectedResourceIds.delete(id);
+    const active = visibleResources.filter(item => item.status !== 'completed');
+    const archived = visibleResources.filter(item => item.status === 'completed');
+    $('#resourceCount').textContent = state.resources.filter(item => item.status !== 'completed').length;
+    $('#resourceActiveCount').textContent = active.length;
+    $('#resourceCompletedCount').textContent = archived.length;
+    $('#resourceSummary').innerHTML = `<span><strong>${visibleResources.length}</strong> / ${state.resources.length} 项</span><span><strong>${state.resourceTags.length}</strong> 个标签</span><span><strong>${state.resourceDecks.length}</strong> 个收藏册</span>`;
+    $('#resourceResultsStatus').textContent = filters.activeDeck
+      ? `${resourceDeck(filters.activeDeck).name} 中有 ${visibleResources.length} 项符合当前条件。`
+      : `当前显示 ${visibleResources.length} 项，共 ${state.resources.length} 项。`;
+    const noData = state.resources.length === 0;
+    const noMatch = !noData && visibleResources.length === 0;
+    $('#resourceActiveList').innerHTML = active.length
+      ? `<div class="resource-card-grid">${active.map(resourceRow).join('')}</div>`
+      : `<div class="resource-empty">${noData ? '暂无资源' : noMatch ? '暂无结果' : '暂无待处理'}</div>`;
+    $('#resourceArchiveList').innerHTML = archived.length
+      ? `<div class="resource-card-grid">${archived.map(resourceRow).join('')}</div>`
+      : `<div class="resource-empty">${noMatch ? '暂无结果' : '暂无已完成'}</div>`;
+    renderResourceFilterChips(filters);
+    const selectedVisible = visibleResources.filter(item => selectedResourceIds.has(item.id)).length;
+    $('#resourceSelectionCount').textContent = `已选 ${selectedVisible} 项`;
+    $('#resourceSelectAll').checked = Boolean(visibleResources.length && selectedVisible === visibleResources.length);
+    $('#resourceSelectAll').indeterminate = selectedVisible > 0 && selectedVisible < visibleResources.length;
+    $('#resourceSelectionBar').hidden = visibleResources.length === 0;
+    for (const selector of ['#clearResourceSelection', '#deleteSelectedResources']) $(selector).disabled = resourceBatchBusy || selectedVisible === 0;
+    renderResourceBatchValue();
+    applyInterfaceLanguage($('#resourcesView'));
+    restoreResourceFocus(focused);
   }
 
   function openResourceDialog(item = null) {
     if (item && !editableSyncRecord('resource', item.id, item)) return;
-    resourceLanguageMapped = false;
+    resourceLanguageMapped = !item?.legacy_language;
     resourceEditOriginal = item ? structuredClone(item) : null;
     $('#resourceDialogTitle').textContent = item ? '编辑资源' : '新资源';
     $('#resourceEditId').value = item?.id || '';
@@ -3815,14 +4216,26 @@ if (!FEATURES.conversation) {
     $('#resourceUrl').value = item?.url || '';
     fillResourceOptions(true);
     $('#resourceType').value = state.resourceTypes.some(type => type.id === item?.type) ? item.type : (state.resourceTypes[0]?.id || '');
+    $('#resourceStatus').value = ['backlog', 'active', 'completed'].includes(item?.status) ? item.status : 'backlog';
     $('#resourceLanguage').value = item?.language_id || '';
     if (item?.legacy_language && item.language_id == null) {
-      $('#resourceLanguage').insertAdjacentHTML('beforeend', `<option value="__legacy__">待映射：${esc(item.legacy_language)}</option>`);
+      $('#resourceLanguage').insertAdjacentHTML('beforeend', `<option value="__legacy__" data-archive-user-content>待映射：${esc(item.legacy_language)}</option>`);
       $('#resourceLanguage').value = '__legacy__';
     }
     $('#resourceTopic').value = item?.topic || '';
     $('#resourceDescription').value = item?.description || '';
+    resourceDraftTagIds.clear();
+    resourceDraftDeckIds.clear();
+    for (const id of item?.tag_ids || []) resourceDraftTagIds.add(id);
+    for (const id of item?.deck_ids || []) resourceDraftDeckIds.add(id);
+    $('#resourceTagSearch').value = '';
+    $('#resourceDeckSearch').value = '';
+    renderResourceDraftTaxonomy('tag');
+    renderResourceDraftTaxonomy('deck');
+    $('#resourceAdvanced').open = Boolean(item && (item.url || item.description || item.language_id || item.legacy_language ||
+      item.topic || item.emoji || item.tag_ids?.length || item.deck_ids?.length));
     prepareResourceEmojiEditor(item);
+    resourceComposerBaseline = resourceComposerValue();
     resourceComposer.hidden = false;
     $('#resourceName').focus();
     resourceComposer.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'nearest' });
@@ -3833,18 +4246,38 @@ if (!FEATURES.conversation) {
     $('#resourceForm').reset();
     $('#resourceEditId').value = '';
     resourceEmojiDraft = '';
+    resourceDraftTagIds.clear();
+    resourceDraftDeckIds.clear();
+    resourceEditOriginal = null;
+    resourceComposerBaseline = null;
+  }
+
+  function resourceComposerValue() {
+    return {
+      name: $('#resourceName').value.trim(),
+      url: $('#resourceUrl').value.trim(),
+      type: $('#resourceType').value,
+      status: $('#resourceStatus').value,
+      language: $('#resourceLanguage').value,
+      languageMapped: resourceLanguageMapped,
+      topic: $('#resourceTopic').value.trim(),
+      description: $('#resourceDescription').value.trim(),
+      emoji: resourceEmojiDraft,
+      tags: [...resourceDraftTagIds].sort(),
+      decks: [...resourceDraftDeckIds].sort(),
+    };
   }
 
   async function syncResource(item, method = 'POST') {
     if (!editableSyncRecord('resource', item.id, item)) return false;
     return commitSync(instance => method === 'DELETE'
       ? instance.remove('resource', String(item.id))
-      : instance.put('resource', String(item.id), item));
+      : instance.put('resource', String(item.id), item), resourceEngine());
   }
 
   async function saveResourceSettingsToCloud(settings) {
     // 仅由用户保存动作调用；首次离线改动也入队，与已有服务器配置交由冲突面板确认。
-    return commitSync(instance => instance.put('settings', 'resources', settings));
+    return commitSync(instance => instance.put('settings', 'resources', settings), resourceEngine());
   }
 
   async function updateResource(item, changes) {
@@ -3858,8 +4291,78 @@ if (!FEATURES.conversation) {
   $('#closeResourceSettings').onclick = () => activateView('resources');
   $('#syncResources').onclick = () => pushAllToCloud({ announce: true });
   $('#resourceLanguage').addEventListener('change', () => { resourceLanguageMapped = $('#resourceLanguage').value !== '__legacy__'; });
-  $('#cancelResource').onclick = closeResourceComposer;
-  $('#clearResourceForm').onclick = () => { $('#resourceForm').reset(); resourceLanguageMapped = true; $('#resourceLanguage').value = ''; prepareResourceEmojiEditor(); $('#resourceName').focus(); };
+  $('#cancelResource').onclick = async () => {
+    const dirty = resourceComposerBaseline !== null &&
+      JSON.stringify(resourceComposerValue()) !== JSON.stringify(resourceComposerBaseline);
+    if (dirty && !await confirmAction('关闭后将放弃尚未保存的资源输入。', { title: '放弃修改', confirmLabel: '放弃' })) return;
+    closeResourceComposer();
+  };
+  $('#clearResourceForm').onclick = () => {
+    $('#resourceForm').reset();
+    resourceLanguageMapped = true;
+    $('#resourceLanguage').value = '';
+    resourceDraftTagIds.clear();
+    resourceDraftDeckIds.clear();
+    renderResourceDraftTaxonomy('tag');
+    renderResourceDraftTaxonomy('deck');
+    prepareResourceEmojiEditor();
+    $('#resourceName').focus();
+  };
+  for (const kind of ['tag', 'deck']) {
+    const search = $(kind === 'tag' ? '#resourceTagSearch' : '#resourceDeckSearch');
+    search.oninput = () => renderResourceDraftTaxonomy(kind);
+    search.onkeydown = event => {
+      if (!['Enter', 'ArrowDown'].includes(event.key)) return;
+      const options = $(kind === 'tag' ? '#resourceTagOptions' : '#resourceDeckOptions');
+      const first = options.querySelector('button,[data-resource-draft-tag],[data-resource-draft-deck]');
+      if (!first) return;
+      event.preventDefault();
+      if (event.key === 'ArrowDown') first.focus();
+      else if (first.matches('button')) first.click();
+      else {
+        first.checked = !first.checked;
+        first.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    };
+  }
+  $('#resourceForm').onchange = event => {
+    for (const kind of ['tag', 'deck']) {
+      const input = event.target.closest(`[data-resource-draft-${kind}]`);
+      if (!input) continue;
+      const selected = kind === 'tag' ? resourceDraftTagIds : resourceDraftDeckIds;
+      input.checked ? selected.add(input.dataset[`resourceDraft${kind[0].toUpperCase()}${kind.slice(1)}`]) :
+        selected.delete(input.dataset[`resourceDraft${kind[0].toUpperCase()}${kind.slice(1)}`]);
+      renderResourceDraftTaxonomy(kind);
+      return;
+    }
+  };
+  $('#resourceForm').onclick = async event => {
+    const createTag = event.target.closest('[data-create-resource-tag]');
+    if (createTag) {
+      const name = createTag.dataset.createResourceTag.trim();
+      if (!name) return;
+      let tag = state.resourceTags.find(item => normalizeSettingName(item.name) === normalizeSettingName(name));
+      if (!tag) {
+        tag = { id: crypto.randomUUID(), name, emoji: '🏷️' };
+        const settings = resourceSettingsData();
+        settings.tags.push(tag);
+        if (!await persistResourceSettings(settings)) return;
+      }
+      resourceDraftTagIds.add(tag.id);
+      $('#resourceTagSearch').value = '';
+      renderResourceDraftTaxonomy('tag');
+      $('#resourceTagSearch').focus();
+      return;
+    }
+    for (const kind of ['tag', 'deck']) {
+      const button = event.target.closest(`[data-remove-resource-draft-${kind}]`);
+      if (!button) continue;
+      const selected = kind === 'tag' ? resourceDraftTagIds : resourceDraftDeckIds;
+      selected.delete(button.dataset[`removeResourceDraft${kind[0].toUpperCase()}${kind.slice(1)}`]);
+      renderResourceDraftTaxonomy(kind);
+      return;
+    }
+  };
   $('#resourceForm').onsubmit = async event => {
     event.preventDefault();
     if (resourceFormBusy) return;
@@ -3867,20 +4370,25 @@ if (!FEATURES.conversation) {
     const existing = state.resources.find(item => item.id === id);
     if (id && !existing) return notify('该资源已删除或缺失，请先处理同步状态；表单输入已保留。', 'error');
     const language = $('#resourceLanguage').value;
-    const item = existing ? { ...existing } : { id: crypto.randomUUID(), status: 'backlog', completed_at: '' };
+    const item = existing ? { ...existing } : { id: crypto.randomUUID(), status: 'backlog', completed_at: '', tag_ids: [], deck_ids: [] };
+    const status = $('#resourceStatus').value;
     Object.assign(item, { name: $('#resourceName').value.trim(), url: $('#resourceUrl').value.trim(), type: $('#resourceType').value,
       language_id: language === '__legacy__' ? null : language || null,
-      topic: $('#resourceTopic').value.trim(), description: $('#resourceDescription').value.trim(), emoji: resourceEmojiDraft });
+      topic: $('#resourceTopic').value.trim(), description: $('#resourceDescription').value.trim(), emoji: resourceEmojiDraft,
+      tag_ids: [...resourceDraftTagIds], deck_ids: [...resourceDraftDeckIds], status,
+      completed_at: status === 'completed' ? (existing?.completed_at || new Date().toISOString()) : '' });
     if (resourceLanguageMapped) item.legacy_language = null;
     if (!item.name || !state.resourceTypes.some(type => type.id === item.type) ||
-        item.language_id !== null && !state.resourceLanguages.some(entry => entry.id === item.language_id)) {
-      notify('请输入名称并选择有效的类型和语言；配置可能已变化，当前输入仍保留。', 'error');
+        item.language_id !== null && !state.resourceLanguages.some(entry => entry.id === item.language_id) ||
+        item.tag_ids.some(tagId => !state.resourceTags.some(tag => tag.id === tagId)) ||
+        item.deck_ids.some(deckId => !state.resourceDecks.some(deck => deck.id === deckId))) {
+      notify('请输入名称并选择有效的类型、语言、标签和收藏册；配置可能已变化，当前输入仍保留。', 'error');
       return;
     }
     resourceFormBusy = true;
     $('#resourceForm').inert = true;
     try {
-      const changes = editedFields(item, resourceEditOriginal, ['name', 'url', 'type', 'language_id', 'legacy_language', 'topic', 'description', 'emoji']);
+      const changes = editedFields(item, resourceEditOriginal, ['name', 'url', 'type', 'language_id', 'legacy_language', 'topic', 'description', 'emoji', 'tag_ids', 'deck_ids', 'status', 'completed_at']);
       if (!await syncResource(changes, existing ? 'PATCH' : 'POST')) return;
       closeResourceComposer();
       save(); renderResources();
@@ -3892,84 +4400,242 @@ if (!FEATURES.conversation) {
       }
     } finally { resourceFormBusy = false; $('#resourceForm').inert = false; }
   };
-  $('#resourceSearch').oninput = () => { renderResources(); syncRouteState('resources', true); };
-  $('#resourceTopicFilter').onchange = () => { renderResources(); syncRouteState('resources', true); };
-  $('#resourceTypeFilter').onchange = () => { renderResources(); syncRouteState('resources', true); };
-  let resourceCardClickTimer = 0;
+  const updateResourceFilters = () => { renderResources(); syncRouteState('resources', true); };
+  $('#resourceSearch').oninput = updateResourceFilters;
+  for (const selector of ['#resourceTopicFilter', '#resourceTypeFilter', '#resourceLanguageFilter', '#resourceStatusFilter', '#resourceSort']) {
+    $(selector).onchange = updateResourceFilters;
+  }
   function openResourceDetail(item) {
     const type = resourceType(item.type);
     const safeUrl = safeResourceUrl(item.url);
+    const tagButtons = (item.tag_ids || []).map(id => `<button type="button" class="resource-taxonomy-chip" data-resource-filter-tag="${esc(id)}">${resourceTag(id).emoji ? `${esc(resourceTag(id).emoji)} ` : ''}${esc(resourceTag(id).name)}</button>`).join('') || '未设置';
+    const deckButtons = (item.deck_ids || []).map(id => `<button type="button" class="resource-taxonomy-chip deck" data-resource-filter-deck="${esc(id)}">${resourceDeck(id).emoji ? `${esc(resourceDeck(id).emoji)} ` : ''}${esc(resourceDeck(id).name)}</button>`).join('') || '未加入';
     $('#resourceDetailEmoji').textContent = item.emoji || defaultResourceEmoji(item);
     $('#resourceDetailName').textContent = item.name;
-    $('#resourceDetailDescription').textContent = item.description || '没有说明';
-    $('#resourceDetailMeta').innerHTML = `<div><dt>类型</dt><dd>${esc(type.name)}</dd></div><div><dt>主题</dt><dd>${esc(item.topic || '未设置')}</dd></div><div><dt>语言</dt><dd>${esc(item.language || '不限语言')}</dd></div><div><dt>状态</dt><dd>${esc(resourceStatusNames[item.status] || '未设置')}</dd></div><div class="wide"><dt>链接</dt><dd>${safeUrl ? `<a href="${esc(safeUrl)}" target="_blank" rel="noopener noreferrer">${esc(item.url)}</a>` : '未设置'}</dd></div>`;
+    $('#resourceDetailDescription').textContent = item.description || '';
+    $('#resourceDetailDescription').hidden = !item.description;
+    $('#resourceDetailMeta').innerHTML = `<div><dt>类型</dt><dd>${esc(type.name)}</dd></div><div><dt>旧主题</dt><dd data-resource-user-content>${esc(item.topic || '未设置')}</dd></div><div><dt>语言</dt><dd>${esc(item.language || '不限语言')}</dd></div><div><dt>状态</dt><dd>${esc(resourceStatusNames[item.status] || '未设置')}</dd></div><div class="wide"><dt>标签</dt><dd class="resource-taxonomy-chips">${tagButtons}</dd></div><div class="wide"><dt>收藏册</dt><dd class="resource-taxonomy-chips">${deckButtons}</dd></div><div class="wide"><dt>链接</dt><dd>${safeUrl ? `<a href="${esc(safeUrl)}" target="_blank" rel="noopener noreferrer">${esc(item.url)}</a>` : '未设置'}</dd></div>`;
     applyInterfaceLanguage($('#resourceDetailDialog'));
     $('#openResourceDetailLink').hidden = !safeUrl;
     if (safeUrl) $('#openResourceDetailLink').href = safeUrl;
     $('#editResourceDetail').dataset.resourceId = item.id;
+    $('#deleteResourceDetail').dataset.resourceId = item.id;
     $('#resourceDetailDialog').showModal();
   }
   $('#closeResourceDetail').onclick = () => $('#resourceDetailDialog').close();
   $('#editResourceDetail').onclick = event => { const item = state.resources.find(entry => entry.id === event.currentTarget.dataset.resourceId); $('#resourceDetailDialog').close(); if (item) openResourceDialog(item); };
+  $('#deleteResourceDetail').onclick = async event => {
+    const item = state.resources.find(entry => entry.id === event.currentTarget.dataset.resourceId);
+    if (!item || !await confirmAction(`删除“${item.name}”？资源会进入可恢复记录，Tags 与 Deck 不会被删除。`, { title: '删除资源', confirmLabel: '删除资源' })) return;
+    snapshotBackup('before-delete-resource');
+    if (!editableSyncRecord('resource', item.id, item)) return;
+    if (await syncResource({ id: item.id, _syncCandidate: item._syncCandidate }, 'DELETE')) {
+      selectedResourceIds.delete(item.id);
+      $('#resourceDetailDialog').close();
+      save();
+      renderResources();
+    }
+  };
   $('#resourceDetailDialog').onclick = event => { if (event.target === $('#resourceDetailDialog')) $('#resourceDetailDialog').close(); };
-  $('#resourcesView').ondblclick = event => {
-    if (event.target.closest('button,input,a')) return;
-    clearTimeout(resourceCardClickTimer);
-    const item = state.resources.find(entry => entry.id === event.target.closest('[data-resource-id]')?.dataset.resourceId);
-    if (item) openResourceDialog(item);
-  };
-  $('#resourcesView').onkeydown = event => {
-    if (event.key !== 'Enter' || event.target.closest('button,input,a')) return;
-    const item = state.resources.find(entry => entry.id === event.target.closest('[data-resource-id]')?.dataset.resourceId);
-    if (item) openResourceDetail(item);
-  };
   $('#resourcesView').onchange = event => {
-    if (!event.target.matches('[data-resource-select]')) return;
-    const id = event.target.closest('[data-resource-id]')?.dataset.resourceId;
-    event.target.checked ? selectedResourceIds.add(id) : selectedResourceIds.delete(id);
-    renderResources();
-  };
-  $('#resourcesView').onclick = async event => {
-    const button = event.target.closest('[data-resource-action]');
-    if (!button) {
-      if (event.target.closest('input,a,label')) return;
-      const item = state.resources.find(entry => entry.id === event.target.closest('[data-resource-id]')?.dataset.resourceId);
-      if (item) { clearTimeout(resourceCardClickTimer); resourceCardClickTimer = window.setTimeout(() => openResourceDetail(item), 220); }
+    if (event.target.matches('[data-resource-select]')) {
+      const id = event.target.closest('[data-resource-id]')?.dataset.resourceId;
+      event.target.checked ? selectedResourceIds.add(id) : selectedResourceIds.delete(id);
+      renderResources();
       return;
     }
+    for (const kind of ['tag', 'deck']) {
+      const input = event.target.closest(`[data-resource-filter-${kind}]`);
+      if (!input) continue;
+      const selected = kind === 'tag' ? resourceFilterTagIds : resourceFilterDeckIds;
+      input.checked ? selected.add(input.dataset[`resourceFilter${kind[0].toUpperCase()}${kind.slice(1)}`]) :
+        selected.delete(input.dataset[`resourceFilter${kind[0].toUpperCase()}${kind.slice(1)}`]);
+      updateResourceFilters();
+      return;
+    }
+  };
+  $('#resourcesView').onclick = async event => {
+    const deckNav = event.target.closest('[data-resource-deck]');
+    if (deckNav) {
+      activeResourceDeckId = deckNav.dataset.resourceDeck || '';
+      updateResourceFilters();
+      return;
+    }
+    const taxonomyTag = event.target.closest('[data-resource-filter-tag]');
+    const taxonomyDeck = event.target.closest('[data-resource-filter-deck]');
+    if (taxonomyTag || taxonomyDeck) {
+      const kind = taxonomyTag ? 'tag' : 'deck';
+      const id = (taxonomyTag || taxonomyDeck).dataset[`resourceFilter${kind[0].toUpperCase()}${kind.slice(1)}`];
+      (kind === 'tag' ? resourceFilterTagIds : resourceFilterDeckIds).add(id);
+      $('#resourceDetailDialog').close();
+      updateResourceFilters();
+      return;
+    }
+    const clear = event.target.closest('[data-clear-resource-filter]');
+    if (clear) {
+      const kind = clear.dataset.clearResourceFilter, id = clear.dataset.filterId;
+      if (kind === 'query') $('#resourceSearch').value = '';
+      else if (['type', 'language', 'status', 'topic'].includes(kind)) $(`#resource${kind[0].toUpperCase()}${kind.slice(1)}Filter`).value = 'all';
+      else if (kind === 'tag') resourceFilterTagIds.delete(id);
+      else if (kind === 'deck') resourceFilterDeckIds.delete(id);
+      else if (kind === 'activeDeck') activeResourceDeckId = '';
+      updateResourceFilters();
+      return;
+    }
+    const button = event.target.closest('[data-resource-action]');
+    if (!button) return;
     const item = state.resources.find(entry => entry.id === button.closest('[data-resource-id]')?.dataset.resourceId);
     if (!item) return;
     const action = button.dataset.resourceAction;
+    if (action === 'details') return openResourceDetail(item);
+    if (action === 'edit') return openResourceDialog(item);
     if (action === 'start') return updateResource(item, { status: 'active', completed_at: '' });
     if (action === 'backlog' || action === 'restore') return updateResource(item, { status: 'backlog', completed_at: '' });
     if (action === 'complete') return updateResource(item, { status: 'completed', completed_at: new Date().toISOString() });
   };
+  $('#resourceDetailMeta').onclick = event => $('#resourcesView').onclick(event);
+  $('#clearResourceFilters').onclick = () => {
+    $('#resourceSearch').value = '';
+    for (const selector of ['#resourceTypeFilter', '#resourceLanguageFilter', '#resourceStatusFilter', '#resourceTopicFilter']) $(selector).value = 'all';
+    resourceFilterTagIds.clear();
+    resourceFilterDeckIds.clear();
+    activeResourceDeckId = '';
+    updateResourceFilters();
+  };
+  $('#resourceSelectAll').onchange = event => {
+    for (const item of visibleResources) event.target.checked ? selectedResourceIds.add(item.id) : selectedResourceIds.delete(item.id);
+    renderResources();
+  };
   $('#clearResourceSelection').onclick = () => { selectedResourceIds.clear(); renderResources(); };
+
+  function renderResourceBatchValue() {
+    const action = $('#resourceBatchAction').value;
+    const target = $('#resourceBatchValue');
+    const previous = target.value;
+    target.hidden = !action || action === 'delete';
+    if (!action || action === 'delete') {
+      target.innerHTML = '';
+    } else if (action === 'status') {
+      target.innerHTML = Object.entries(resourceStatusNames).map(([value, label]) => `<option value="${value}">${label}</option>`).join('');
+    } else if (action === 'type') {
+      target.innerHTML = state.resourceTypes.map(item => `<option value="${esc(item.id)}" data-archive-user-content>${item.emoji ? `${esc(item.emoji)} ` : ''}${esc(item.name)}</option>`).join('');
+    } else {
+      const items = action.includes('tags') ? state.resourceTags : state.resourceDecks;
+      target.innerHTML = items.map(item => `<option value="${esc(item.id)}" data-archive-user-content>${item.emoji ? `${esc(item.emoji)} ` : ''}${esc(item.name)}</option>`).join('');
+    }
+    if ([...target.options].some(option => option.value === previous)) target.value = previous;
+    updateResourceBatchButton();
+  }
+  function updateResourceBatchButton() {
+    const action = $('#resourceBatchAction').value;
+    const target = $('#resourceBatchValue');
+    $('#applyResourceBatchAction').disabled = resourceBatchBusy || !selectedResourceIds.size || !action || (!target.hidden && !target.value);
+  }
+  $('#resourceBatchAction').onchange = renderResourceBatchValue;
+  $('#resourceBatchValue').onchange = updateResourceBatchButton;
+
+  async function runResourceBatch(action, value = '') {
+    const targets = visibleResources.filter(item => selectedResourceIds.has(item.id));
+    if (!targets.length || resourceBatchBusy) return false;
+    const validActions = new Set(['status', 'type', 'add_tags', 'remove_tags', 'add_decks', 'remove_decks', 'delete']);
+    const validValue = action === 'delete' ||
+      action === 'status' && Object.hasOwn(resourceStatusNames, value) ||
+      action === 'type' && state.resourceTypes.some(item => item.id === value) ||
+      action.includes('tags') && state.resourceTags.some(item => item.id === value) ||
+      action.includes('decks') && state.resourceDecks.some(item => item.id === value);
+    if (!validActions.has(action) || !validValue) {
+      notify('批量操作目标已失效，请重新选择。', 'error');
+      renderResourceBatchValue();
+      return false;
+    }
+    const completedAt = action === 'status' && value === 'completed' ? new Date().toISOString() : '';
+    const optimistic = targets.map(item => {
+      let patch = {};
+      if (action === 'status') patch = { status: value, completed_at: value === 'completed' ? (item.completed_at || completedAt) : '' };
+      else if (action === 'type') patch = { type: value };
+      else if (action === 'delete') return { entity: 'resource', id: item.id, kind: 'delete', patch: {} };
+      else {
+        const field = action.includes('tags') ? 'tag_ids' : 'deck_ids';
+        const current = [...new Set(item[field] || [])];
+        patch = { [field]: action.startsWith('add_') ? [...new Set([...current, value])] : current.filter(id => id !== value) };
+      }
+      return { entity: 'resource', id: item.id, kind: 'patch', patch };
+    });
+    const command = {
+      command: 'bulk',
+      resource_ids: targets.map(item => item.id),
+      action,
+      ...(action === 'status' || action === 'type' ? { value } :
+        ['add_tags', 'remove_tags', 'add_decks', 'remove_decks'].includes(action) ? { ids: [value] } : {}),
+      ...(completedAt ? { completed_at: completedAt } : {}),
+    };
+    resourceBatchBusy = true;
+    renderResources();
+    try {
+      const instance = resourceEngine();
+      const saved = collectionsEngine
+        ? await commitSync(engineInstance => engineInstance.command(command, optimistic), instance)
+        : await commitSync(engineInstance => engineInstance.batch(optimistic.map(change => ({
+          action: change.kind === 'delete' ? 'remove' : 'put',
+          entity: change.entity,
+          id: change.id,
+          ...(change.kind === 'delete' ? {} : { data: change.patch }),
+        }))), instance);
+      if (saved) selectedResourceIds.clear();
+      return saved;
+    } finally {
+      resourceBatchBusy = false;
+      renderResources();
+    }
+  }
+
+  $('#applyResourceBatchAction').onclick = () => runResourceBatch($('#resourceBatchAction').value, $('#resourceBatchValue').value);
   $('#deleteSelectedResources').onclick = async () => {
-    const doomed = state.resources.filter(item => selectedResourceIds.has(item.id));
+    const doomed = visibleResources.filter(item => selectedResourceIds.has(item.id));
     if (!doomed.length || !await confirmAction(`确定删除所选的 ${doomed.length} 项资源吗？`, { title: '删除资源', confirmLabel: '删除所选' })) return;
     snapshotBackup('before-delete-resources');
     if (doomed.some(item => !editableSyncRecord('resource', item.id, item))) return;
-    for (const item of doomed) {
-      if (!await syncResource(item, 'DELETE')) { renderResources(); return; }
-      selectedResourceIds.delete(item.id);
+    if (await runResourceBatch('delete')) {
+      save();
+      renderResources();
     }
-    save(); renderResources();
   };
 
   function resourceConfigRow(kind, item) {
-    const name = item.name;
-    const key = item.id;
-    const noun = kind === 'language' ? '语言' : kind === 'group' ? '分组' : '类型';
-    return `<div class="resource-config-row" data-config-kind="${kind}" data-config-key="${esc(key)}">${kind === 'type' ? `<input class="resource-type-emoji" value="${esc(item.emoji || '')}" maxlength="16" aria-label="编辑类型图标" placeholder="📌">` : ''}<input value="${esc(name)}" maxlength="80" aria-label="编辑${noun}名称"><button class="btn" data-config-action="save" type="button">保存</button><button class="btn danger" data-config-action="remove" type="button">移除</button></div>`;
+    const noun = { language: '语言', type: '类型', tag: '标签', deck: '收藏册' }[kind] || '配置';
+    const field = { language: 'language_id', type: 'type', tag: 'tag_ids', deck: 'deck_ids' }[kind];
+    const count = state.resources.filter(resource => Array.isArray(resource[field]) ? resource[field].includes(item.id) : resource[field] === item.id).length;
+    const hasEmoji = ['type', 'tag', 'deck'].includes(kind);
+    const editing = editingResourceConfigKeys.has(`${kind}:${item.id}`);
+    const label = `${noun}“${item.name}”`;
+    const button = (verb, text, className = 'btn') =>
+      `<button class="${className}" data-config-action="${verb}" type="button" aria-label="${text}${esc(label)}">${text}</button>`;
+    const actions = button('view', '查看') +
+      (editing ? button('save', '保存', 'btn primary') + button('cancel', '取消') : button('edit', '编辑')) +
+      (kind === 'tag' || kind === 'type' ? button('merge', '合并') : '') +
+      button('remove', '移除', 'btn danger');
+    const emoji = hasEmoji
+      ? editing
+        ? `<input class="resource-type-emoji" value="${esc(item.emoji || '')}" maxlength="16" aria-label="编辑${noun}图标" placeholder="📌">`
+        : `<span class="resource-config-value resource-config-emoji" aria-hidden="true">${esc(item.emoji || '·')}</span>`
+      : '';
+    const name = editing
+      ? `<input class="resource-config-name" value="${esc(item.name)}" maxlength="80" aria-label="编辑${noun}名称">`
+      : `<span class="resource-config-value resource-config-name" data-resource-user-content>${esc(item.name)}</span>`;
+    const description = kind === 'deck'
+      ? editing
+        ? `<input class="resource-config-description" value="${esc(item.description || '')}" maxlength="500" aria-label="编辑收藏册说明" placeholder="说明（可选）">`
+        : `<span class="resource-config-value resource-config-description" data-resource-user-content>${esc(item.description || '')}</span>`
+      : '';
+    return `<div class="resource-config-row${editing ? ' editing' : ''}" data-config-kind="${kind}" data-config-key="${esc(item.id)}">${emoji}${name}${description}<span class="resource-config-count">${count} 项</span><div class="resource-config-actions">${actions}</div></div>`;
   }
 
   function renderResourceSettings(force = false) {
     if (resourceSettingsBusy) return;
-    const focused = $('#resourceSettingsView').contains(document.activeElement);
+    const focused = Boolean(document.activeElement?.closest?.('.resource-config-row'));
     if (settingsDirtyRows.size || focused) {
       // 即使 force 也不覆盖脏行；只追加新配置，避免其他未保存项挡住新增项。
-      for (const [kind, items, selector] of [['language', state.resourceLanguages, '#resourceLanguageSettings'], ['type', state.resourceTypes, '#resourceTypeSettings']]) {
+      for (const [kind, items, selector] of [['language', state.resourceLanguages, '#resourceLanguageSettings'], ['type', state.resourceTypes, '#resourceTypeSettings'], ['tag', state.resourceTags, '#resourceTagSettings']]) {
         const list = $(selector);
         for (const item of items) {
           if ([...list.querySelectorAll('[data-config-key]')].some(row => row.dataset.configKey === item.id)) continue;
@@ -3980,9 +4646,21 @@ if (!FEATURES.conversation) {
     }
     $('#resourceLanguageSettings').innerHTML = state.resourceLanguages.map(item => resourceConfigRow('language', item)).join('');
     $('#resourceTypeSettings').innerHTML = state.resourceTypes.map(item => resourceConfigRow('type', item)).join('');
+    const query = $('#resourceTagSettingsSearch').value.trim().toLocaleLowerCase();
+    const sort = $('#resourceTagSettingsSort').value;
+    const tags = state.resourceTags.filter(item => !query || `${item.name} ${item.emoji || ''}`.toLocaleLowerCase().includes(query));
+    tags.sort((a, b) => {
+      const count = item => state.resources.filter(resource => (resource.tag_ids || []).includes(item.id)).length;
+      if (sort === 'count-desc') return count(b) - count(a) || a.name.localeCompare(b.name);
+      if (sort === 'count-asc') return count(a) - count(b) || a.name.localeCompare(b.name);
+      return a.name.localeCompare(b.name, state.displayLanguage === 'en' ? 'en' : 'zh-CN');
+    });
+    $('#resourceTagSettings').innerHTML = tags.map(item => resourceConfigRow('tag', item)).join('') ||
+      '<p class="small">暂无结果</p>';
+    renderResourceDeckSettings();
   }
   const resourceSettingsData = () => structuredClone({
-    schema_version: 3,
+    schema_version: 4,
     languages: state.resourceLanguages,
     groups: state.resourceGroups,
     types: state.resourceTypes,
@@ -3990,13 +4668,15 @@ if (!FEATURES.conversation) {
     decks: state.resourceDecks,
   });
   function validResourceSettings(settings) {
-    for (const [key, limit] of [['languages', 200], ['groups', 200], ['types', 500]]) {
+    for (const [key, limit] of [['languages', 200], ['groups', 200], ['types', 500], ['tags', 1000], ['decks', 500]]) {
       const names = new Set(), ids = new Set();
-      if (settings[key].length > limit) return false;
+      if (!Array.isArray(settings[key]) || settings[key].length > limit) return false;
       for (const item of settings[key]) {
         const name = item.name?.trim();
-        if (!item.id || ids.has(item.id) || !name || name.length > 80 || names.has(name) || key === 'languages' && name === '不限语言') return false;
-        ids.add(item.id); names.add(name);
+        const normalized = String(name || '').normalize('NFKC').replace(/\s+/gu, ' ').toLocaleLowerCase('en-US');
+        if (!item.id || ids.has(item.id) || !name || name.length > 80 || names.has(normalized) || key === 'languages' && name === '不限语言' ||
+            key === 'decks' && String(item.description || '').length > 500) return false;
+        ids.add(item.id); names.add(normalized);
       }
     }
     return true;
@@ -4007,11 +4687,12 @@ if (!FEATURES.conversation) {
     if (resourceSettingsBusy) return false;
     resourceSettingsBusy = true;
     $('#resourceSettingsView').inert = true;
+    $('#resourceDeckDialog').inert = true;
     try {
       const saved = await saveResourceSettingsToCloud(settings);
       if (saved) { save(); renderResources(); }
       return saved;
-    } finally { resourceSettingsBusy = false; $('#resourceSettingsView').inert = false; }
+    } finally { resourceSettingsBusy = false; $('#resourceSettingsView').inert = false; $('#resourceDeckDialog').inert = false; }
   }
 
   const markSettingsDirty = event => {
@@ -4020,45 +4701,192 @@ if (!FEATURES.conversation) {
   };
   $('#resourceSettingsView').addEventListener('input', markSettingsDirty);
   $('#resourceSettingsView').addEventListener('change', markSettingsDirty);
+  $('#resourceDeckDialog').addEventListener('input', markSettingsDirty);
+  $('#resourceDeckDialog').addEventListener('change', markSettingsDirty);
   for (const [formId, inputId, key] of [
     ['addResourceLanguageForm', 'newResourceLanguage', 'languages'],
-    ['addResourceTypeForm', 'newResourceType', 'types']
+    ['addResourceTypeForm', 'newResourceType', 'types'],
+    ['addResourceTagForm', 'newResourceTag', 'tags'],
   ]) {
     $('#' + formId).onsubmit = async event => {
       event.preventDefault();
       const input = $('#' + inputId), settings = resourceSettingsData();
       const item = { id: crypto.randomUUID(), name: input.value.trim() };
-      if (key === 'types') item.emoji = firstGrapheme($('#newResourceTypeEmoji')?.value || '');
+      if (key === 'types' || key === 'tags') item.emoji = firstGrapheme($(key === 'types' ? '#newResourceTypeEmoji' : '#newResourceTagEmoji')?.value || '');
       settings[key].push(item);
       if (!await persistResourceSettings(settings)) return;
       input.value = '';
-      if (key === 'types' && $('#newResourceTypeEmoji')) $('#newResourceTypeEmoji').value = '';
+      if (key === 'types') $('#newResourceTypeEmoji').value = '';
+      if (key === 'tags') $('#newResourceTagEmoji').value = '';
       settingsDirtyRows.delete($('#' + formId));
       renderResourceSettings(true);
       notify('资源设置已保存本机；云端进度请查看同步状态。');
     };
   }
+
+  function renderResourceDeckSettings() {
+    if (!$('#resourceDeckSettings')) return;
+    $('#resourceDeckSettings').innerHTML = state.resourceDecks.map(item => resourceConfigRow('deck', item)).join('') ||
+      '<p class="small">暂无收藏册</p>';
+  }
+
+  async function runTaxonomyCommand(command, nextSettings, resourceChanges) {
+    const optimistic = [
+      { entity: 'settings', id: 'resources', kind: 'patch', patch: nextSettings },
+      ...resourceChanges.map(({ item, patch }) => ({ entity: 'resource', id: item.id, kind: 'patch', patch })),
+    ];
+    if (collectionsEngine) return commitSync(instance => instance.command(command, optimistic), collectionsEngine);
+    return commitSync(instance => instance.batch([
+      ...resourceChanges.map(({ item, patch }) => ({ action: 'put', entity: 'resource', id: item.id, data: patch })),
+      { action: 'put', entity: 'settings', id: 'resources', data: nextSettings },
+    ]), resourceEngine());
+  }
+
+  async function handleResourceConfigAction(action, row) {
+    if (!action || resourceSettingsBusy) return;
+    const kind = row.dataset.configKind, id = row.dataset.configKey;
+    const key = { language: 'languages', type: 'types', tag: 'tags', deck: 'decks' }[kind];
+    const settings = resourceSettingsData(), item = settings[key]?.find(entry => entry.id === id);
+    if (!item) return notify('此配置已被远端移除，输入保留；请先处理同步状态。', 'error');
+    const verb = action.dataset.configAction;
+    if (verb === 'edit') {
+      editingResourceConfigKeys.add(`${kind}:${id}`);
+      renderResourceSettings(true);
+      const target = document.querySelector(`[data-config-kind="${kind}"][data-config-key="${CSS.escape(id)}"] .resource-config-name`);
+      target?.focus();
+      target?.select();
+      return;
+    }
+    if (verb === 'cancel') {
+      editingResourceConfigKeys.delete(`${kind}:${id}`);
+      settingsDirtyRows.delete(row);
+      renderResourceSettings(true);
+      setTimeout(() => {
+        document.querySelector(`[data-config-kind="${kind}"][data-config-key="${CSS.escape(id)}"] [data-config-action="edit"]`)?.focus();
+      });
+      return;
+    }
+    if (verb === 'view') {
+      if (kind === 'tag') resourceFilterTagIds.add(id);
+      else if (kind === 'deck') activeResourceDeckId = id;
+      else if (kind === 'type') $('#resourceTypeFilter').value = id;
+      else if (kind === 'language') $('#resourceLanguageFilter').value = id;
+      $('#resourceDeckDialog').close();
+      await activateView('resources');
+      renderResources();
+      return;
+    }
+    if (verb === 'save') {
+      item.name = row.querySelector('.resource-config-name').value.trim();
+      if (['type', 'tag', 'deck'].includes(kind)) item.emoji = firstGrapheme(row.querySelector('.resource-type-emoji')?.value || '');
+      if (kind === 'deck') item.description = row.querySelector('.resource-config-description')?.value.trim() || '';
+      if (!await persistResourceSettings(settings)) return;
+    } else if (verb === 'merge' && (kind === 'tag' || kind === 'type')) {
+      const noun = kind === 'tag' ? '标签' : '类型';
+      const targetName = prompt(`将“${item.name}”合并到哪个${noun}？请输入目标${noun}名称。`);
+      if (!targetName) return;
+      const target = settings[key].find(entry => entry.id !== id && normalizeSettingName(entry.name) === normalizeSettingName(targetName));
+      if (!target) return notify(`没有找到唯一的目标${noun}；请先确认名称。`, 'error');
+      const changes = state.resources.filter(resource =>
+        kind === 'tag' ? (resource.tag_ids || []).includes(id) : resource.type === id).map(resource => ({
+        item: resource,
+        patch: kind === 'tag'
+          ? { tag_ids: [...new Set(resource.tag_ids.map(tagId => tagId === id ? target.id : tagId))] }
+          : { type: target.id },
+      }));
+      if (!await confirmAction(`合并后，${changes.length} 项资源会改用“${target.name}”。`, { title: `合并${noun}`, confirmLabel: '合并' })) return;
+      if (!await runTaxonomyCommand(
+        { command: kind === 'tag' ? 'merge_tag' : 'delete_type', source_id: id, target_id: target.id },
+        { [key]: settings[key].filter(entry => entry.id !== id) },
+        changes,
+      )) return;
+    } else if (verb === 'remove') {
+      if (kind === 'type') {
+        const affected = state.resources.filter(resource => resource.type === id);
+        if (affected.length) {
+          const targetName = prompt(`“${item.name}”仍被 ${affected.length} 项资源使用。请输入重新分配的目标类型名称。`);
+          if (!targetName) return;
+          const target = settings.types.find(entry => entry.id !== id && normalizeSettingName(entry.name) === normalizeSettingName(targetName));
+          if (!target) return notify('没有找到唯一的目标类型。', 'error');
+          if (!await confirmAction(`将 ${affected.length} 项资源改为“${target.name}”，并移除“${item.name}”？`, { title: '重新分配类型', confirmLabel: '重新分配并移除' })) return;
+          if (!await runTaxonomyCommand(
+            { command: 'delete_type', source_id: id, target_id: target.id },
+            { types: settings.types.filter(entry => entry.id !== id) },
+            affected.map(resource => ({ item: resource, patch: { type: target.id } })),
+          )) return;
+        } else {
+          settings.types = settings.types.filter(entry => entry.id !== id);
+          if (!await persistResourceSettings(settings)) return;
+        }
+      } else if (kind === 'tag' || kind === 'deck') {
+        const field = kind === 'tag' ? 'tag_ids' : 'deck_ids';
+        const affected = state.resources.filter(resource => (resource[field] || []).includes(id));
+        if (!await confirmAction(`移除“${item.name}”及其在 ${affected.length} 项资源上的关联？资源本身不会删除。`, { title: `移除${kind === 'tag' ? '标签' : '收藏册'}`, confirmLabel: '移除关联' })) return;
+        if (!await runTaxonomyCommand(
+          { command: kind === 'tag' ? 'delete_tag' : 'delete_deck', source_id: id },
+          { [key]: settings[key].filter(entry => entry.id !== id) },
+          affected.map(resource => ({ item: resource, patch: { [field]: resource[field].filter(value => value !== id) } })),
+        )) return;
+      } else {
+        const inUse = state.resources.some(resource => resource.language_id === id);
+        if (inUse) return notify('此语言仍被资源使用，请先修改这些资源。', 'error');
+        if (!await confirmAction(`移除“${item.name}”？其稳定 ID 不会被重用。`, { title: '移除语言', confirmLabel: '移除' })) return;
+        settings.languages = settings.languages.filter(entry => entry.id !== id);
+        if (!await persistResourceSettings(settings)) return;
+      }
+    }
+    editingResourceConfigKeys.delete(`${kind}:${id}`);
+    settingsDirtyRows.delete(row);
+    renderResourceSettings(true);
+    setTimeout(() => {
+      document.querySelector(`[data-config-kind="${kind}"][data-config-key="${CSS.escape(id)}"] [data-config-action="edit"]`)?.focus();
+    });
+    renderResources();
+    notify('资源设置已保存本机；云端进度请查看同步状态。');
+  }
+
   $('#resourceSettingsView').onclick = async event => {
     const action = event.target.closest('[data-config-action]');
-    if (!action || resourceSettingsBusy) return;
-    const row = action.closest('[data-config-kind]'), kind = row.dataset.configKind, id = row.dataset.configKey;
-    const key = { language: 'languages', group: 'groups', type: 'types' }[kind];
-    const settings = resourceSettingsData(), item = settings[key].find(entry => entry.id === id);
-    if (!item) return notify('此配置已被远端移除，输入保留；请先处理同步状态。', 'error');
-    if (action.dataset.configAction === 'save') {
-      item.name = row.querySelector('input').value.trim();
-      if (kind === 'type') item.emoji = firstGrapheme(row.querySelector('.resource-type-emoji')?.value || '');
-    } else {
-      const inUse = state.resources.some(entry => kind === 'language' ? entry.language_id === id : entry.type === id);
-      if (inUse) return notify('此配置仍被活动资源或类型引用，请先修改引用。服务器也会再次校验。', 'error');
-      if (!await confirmAction(`移除“${item.name}”？其稳定 ID 不会被重用。`, { title: '移除资源配置', confirmLabel: '移除' })) return;
-      settings[key] = settings[key].filter(entry => entry.id !== id);
-    }
+    if (action) await handleResourceConfigAction(action, action.closest('[data-config-kind]'));
+  };
+  $('#resourceTagSettingsSearch').oninput = () => renderResourceSettings(true);
+  $('#resourceTagSettingsSort').onchange = () => renderResourceSettings(true);
+  const deckDialogIsDirty = () => [...settingsDirtyRows].some(item => item.closest?.('#resourceDeckDialog'));
+  const closeResourceDeckDialog = async () => {
+    if (deckDialogIsDirty() &&
+        !await confirmAction('关闭后将放弃尚未保存的收藏册输入。', { title: '放弃修改', confirmLabel: '放弃' })) return;
+    for (const item of [...settingsDirtyRows]) if (item.closest?.('#resourceDeckDialog')) settingsDirtyRows.delete(item);
+    editingResourceConfigKeys.forEach(key => { if (key.startsWith('deck:')) editingResourceConfigKeys.delete(key); });
+    $('#addResourceDeckForm').reset();
+    $('#resourceDeckDialog').close();
+  };
+  $('#manageResourceDecks').onclick = () => {
+    if (!deckDialogIsDirty()) renderResourceDeckSettings();
+    $('#resourceDeckDialog').showModal();
+  };
+  $('#closeResourceDecks').onclick = closeResourceDeckDialog;
+  $('#resourceDeckDialog').oncancel = event => { event.preventDefault(); void closeResourceDeckDialog(); };
+  $('#resourceDeckDialog').onclick = async event => {
+    if (event.target === $('#resourceDeckDialog')) return closeResourceDeckDialog();
+    const action = event.target.closest('[data-config-action]');
+    if (action) await handleResourceConfigAction(action, action.closest('[data-config-kind]'));
+  };
+  $('#addResourceDeckForm').onsubmit = async event => {
+    event.preventDefault();
+    const settings = resourceSettingsData();
+    const timestamp = new Date().toISOString();
+    settings.decks.push({
+      id: crypto.randomUUID(),
+      name: $('#newResourceDeck').value.trim(),
+      emoji: firstGrapheme($('#newResourceDeckEmoji').value),
+      description: $('#newResourceDeckDescription').value.trim(),
+      created_at: timestamp,
+      updated_at: timestamp,
+    });
     if (!await persistResourceSettings(settings)) return;
-    settingsDirtyRows.delete(row);
-    if (action.dataset.configAction === 'remove') row.remove();
-    renderResourceSettings(true);
-    notify('资源设置已保存本机；云端进度请查看同步状态。');
+    settingsDirtyRows.delete(event.currentTarget);
+    event.currentTarget.reset();
+    renderResourceDeckSettings();
   };
 
   // ── 导航切换 ──────────────────────────────────────
@@ -4067,7 +4895,7 @@ if (!FEATURES.conversation) {
     if (!validViews.has(view)) view = 'editor';
     const url = new URL(location.href);
     url.searchParams.set('view', view);
-    ['language','query','topic','type','chat'].forEach(key => url.searchParams.delete(key));
+    ['language','query','topic','type','status','tag','deck','collection','sort','chat'].forEach(key => url.searchParams.delete(key));
     if (view === 'cards') {
       const language = $('#reviewLanguageFilter').value;
       const query = $('#reviewSearch').value.trim();
@@ -4076,9 +4904,16 @@ if (!FEATURES.conversation) {
     }
     if (view === 'resources') {
       const query = $('#resourceSearch').value.trim(), topic = $('#resourceTopicFilter').value, type = $('#resourceTypeFilter').value;
+      const language = $('#resourceLanguageFilter').value, status = $('#resourceStatusFilter').value, sort = $('#resourceSort').value;
       if (query) url.searchParams.set('query', query);
       if (topic !== 'all') url.searchParams.set('topic', topic);
       if (type !== 'all') url.searchParams.set('type', type);
+      if (language !== 'all') url.searchParams.set('language', language);
+      if (status !== 'all') url.searchParams.set('status', status);
+      if (sort !== 'updated') url.searchParams.set('sort', sort);
+      for (const id of resourceFilterTagIds) url.searchParams.append('tag', id);
+      for (const id of resourceFilterDeckIds) url.searchParams.append('deck', id);
+      if (activeResourceDeckId) url.searchParams.set('collection', activeResourceDeckId);
     }
     if (view === 'conversation' && state.activeChatTabId) url.searchParams.set('chat', state.activeChatTabId);
     history[replace ? 'replaceState' : 'pushState']({ view }, '', url);
@@ -4097,6 +4932,20 @@ if (!FEATURES.conversation) {
       $('#resourceSearch').value = params.get('query') || '';
       const type = params.get('type');
       if ([...$('#resourceTypeFilter').options].some(option => option.value === type)) $('#resourceTypeFilter').value = type;
+      const language = params.get('language');
+      if ([...$('#resourceLanguageFilter').options].some(option => option.value === language)) $('#resourceLanguageFilter').value = language;
+      const status = params.get('status');
+      if ([...$('#resourceStatusFilter').options].some(option => option.value === status)) $('#resourceStatusFilter').value = status;
+      const topic = params.get('topic');
+      if ([...$('#resourceTopicFilter').options].some(option => option.value === topic)) $('#resourceTopicFilter').value = topic;
+      const sort = params.get('sort');
+      if ([...$('#resourceSort').options].some(option => option.value === sort)) $('#resourceSort').value = sort;
+      resourceFilterTagIds.clear();
+      resourceFilterDeckIds.clear();
+      for (const id of params.getAll('tag')) if (id === '__none__' || state.resourceTags.some(item => item.id === id)) resourceFilterTagIds.add(id);
+      for (const id of params.getAll('deck')) if (id === '__none__' || state.resourceDecks.some(item => item.id === id)) resourceFilterDeckIds.add(id);
+      const collection = params.get('collection');
+      activeResourceDeckId = state.resourceDecks.some(item => item.id === collection) ? collection : '';
     }
     if (view === 'conversation') {
       const chat = params.get('chat');
@@ -4136,8 +4985,6 @@ if (!FEATURES.conversation) {
       if (view === 'conversation') updateConversationControls();
       if (view === 'resources') {
         renderResources();
-        const topic = new URLSearchParams(location.search).get('topic');
-        if ([...$('#resourceTopicFilter').options].some(option => option.value === topic)) { $('#resourceTopicFilter').value = topic; renderResources(); }
       }
       if (view === 'resource-settings') renderResourceSettings();
       if (view === 'settings') renderSyncPanel();
@@ -4163,23 +5010,146 @@ if (!FEATURES.conversation) {
   setEditorEditable(hasDraft);
   editor.classList.toggle('is-blank', !hasDraft);
   $('#newTextPrompt').hidden = hasDraft;
-  let instance;
-  instance = await NotebookSync.open({
-    scope: initialScope,
-    fetchState: () => syncTransport(initialScope, '/api/sync/state'),
-    sendOperation: operation => syncTransport(initialScope, '/api/sync/operations', operation),
-    onChange: () => {
-      if (!syncInitialized || engine !== instance || activeScope !== initialScope) return;
-      applySyncProjection();
-    }
-  });
+  let instance, collectionInstance;
+  [instance, collectionInstance] = await Promise.all([
+    NotebookSync.open({
+      scope: initialScope,
+      fetchState: () => syncTransport(initialScope, '/api/sync/state'),
+      sendOperation: operation => syncTransport(initialScope, '/api/sync/operations', operation),
+      onChange: () => {
+        if (!syncInitialized || engine !== instance || activeScope !== initialScope) return;
+        applySyncProjection();
+        if (instance.status().pending) scheduleSyncFlush(instance);
+      },
+    }),
+    NotebookSync.open({
+      scope: initialScope,
+      storageKey: `${initialScope}::collections-v1`,
+      fetchState: () => syncTransport(initialScope, '/api/collections/state'),
+      sendOperation: operation => syncTransport(initialScope, '/api/collections/operations', operation),
+      sendCommand: command => syncTransport(initialScope, '/api/collections/commands', command),
+      onChange: () => {
+        if (!syncInitialized || activeScope !== initialScope) return;
+        if (collectionsEngine === collectionInstance) {
+          applySyncProjection();
+          if (collectionInstance.status().pending) scheduleSyncFlush(collectionInstance);
+        }
+        else if (collectionsRecoveryEngine === collectionInstance) {
+          updateSyncIndicator();
+          renderSyncPanel();
+          if (collectionInstance.status().pending) scheduleSyncFlush(collectionInstance);
+        }
+      },
+    }),
+  ]);
   engine = instance;
+  const collectionStatus = collectionInstance.status();
+  const useCollections = collectionStatus.collectionsSchema >= 1 &&
+    collectionStatus.remoteMode === 'active' &&
+    (collectionStatus.objects > 0 || collectionStatus.pending || collectionStatus.conflicts ||
+      collectionStatus.candidates || collectionStatus.epochChanged);
+  if (useCollections) collectionsEngine = collectionInstance;
+  else if (collectionStatus.pending || collectionStatus.conflicts || collectionStatus.candidates ||
+      collectionStatus.preserved || collectionStatus.stagedBackups || collectionStatus.epochChanged) {
+    collectionsRecoveryEngine = collectionInstance;
+  } else collectionInstance.close();
+
+  const legacyFingerprint = raw => {
+    if (typeof raw !== 'string') return null;
+    let hash = 2166136261;
+    for (let index = 0; index < raw.length; index++) {
+      hash ^= raw.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return `${raw.length}:${(hash >>> 0).toString(16)}`;
+  };
+  migration.legacyFingerprint ??= legacyFingerprint(migration.raw);
+  migration.legacyBackupFingerprint ??= legacyFingerprint(migration.backupRaw);
+  localStorage.setItem(migrationKey, JSON.stringify(migration));
+  const preserveLaterLegacyWrite = async (raw, fingerprintKey, announce = false) => {
+    const fingerprint = legacyFingerprint(raw);
+    if (!fingerprint || fingerprint === migration[fingerprintKey]) return false;
+    let parsed;
+    try { parsed = JSON.parse(raw); }
+    catch {
+      // 即使旧标签页写出损坏 JSON，也把逐字内容留在迁移记录中，不能静默覆盖。
+      migration[`${fingerprintKey}UnreadableRaw`] = raw;
+      migration[fingerprintKey] = fingerprint;
+      localStorage.setItem(migrationKey, JSON.stringify(migration));
+      if (announce) notify('检测到旧标签页数据，但格式无效；原始内容已保留在迁移备份中。', 'error');
+      return false;
+    }
+    const payload = parsed && typeof parsed === 'object' && !Array.isArray(parsed) &&
+      (parsed.state || parsed.sync || parsed.collectionsSync)
+      ? { ...parsed, scope: parsed.scope || initialScope }
+      : { version: 1, scope: initialScope, state: parsed };
+    if (collectionsEngine) {
+      await engine.stageBackup(payload, {
+        entities: ['card', 'document'],
+        includeSettings: false,
+        includeDrafts: true,
+      });
+      await collectionsEngine.stageBackup(payload, {
+        entities: ['resource'],
+        includeSettings: true,
+        includeDrafts: false,
+      });
+    } else {
+      await engine.stageBackup(payload);
+    }
+    migration[fingerprintKey] = fingerprint;
+    migration.lastLegacyHandoffAt = new Date().toISOString();
+    localStorage.setItem(migrationKey, JSON.stringify(migration));
+    if (syncInitialized) applySyncProjection();
+    if (announce) notify('检测到旧标签页的新修改，已保留为待确认恢复内容。');
+    return true;
+  };
+
   if (migration.scope === initialScope && legacyState) {
     await engine.migrateLegacy({
       cards: (legacyState.items || []).map(({ nextReview, ...card }) => ({ ...card, ...(card.next_review || nextReview ? { next_review: card.next_review || nextReview } : {}) })),
-      documents: legacyState.archives || [], resources: legacyState.resources || [],
-      settings: { languages: legacyState.resourceLanguages || [], groups: legacyState.resourceGroups || [], types: legacyState.resourceTypes || [] }
+      documents: legacyState.archives || [],
+      resources: collectionsEngine ? [] : (legacyState.resources || []),
+      settings: collectionsEngine ? null : {
+        languages: legacyState.resourceLanguages || [],
+        groups: legacyState.resourceGroups || [],
+        types: legacyState.resourceTypes || [],
+        tags: legacyState.resourceTags || [],
+        decks: legacyState.resourceDecks || [],
+      },
     });
+    if (collectionsEngine) {
+      await collectionsEngine.migrateLegacy({
+        resources: legacyState.resources || [],
+        settings: {
+          languages: legacyState.resourceLanguages || [],
+          groups: legacyState.resourceGroups || [],
+          types: legacyState.resourceTypes || [],
+          tags: legacyState.resourceTags || [],
+          decks: legacyState.resourceDecks || [],
+        },
+      });
+    }
+  }
+  if (migration.scope === initialScope) {
+    await preserveLaterLegacyWrite(legacyRaw, 'legacyFingerprint');
+    await preserveLaterLegacyWrite(legacyBackupRaw, 'legacyBackupFingerprint');
+  }
+  window.addEventListener('storage', event => {
+    if (event.storageArea !== localStorage || !event.newValue) return;
+    const fingerprintKey = event.key === legacyKey
+      ? 'legacyFingerprint'
+      : event.key === legacyBackupKey
+        ? 'legacyBackupFingerprint'
+        : null;
+    if (fingerprintKey) {
+      void preserveLaterLegacyWrite(event.newValue, fingerprintKey, true)
+        .catch(error => notify(`旧标签页修改尚未导入：${error.message}。原 localStorage 内容仍保留。`, 'error'));
+    }
+  });
+  const resourcesStore = resourceEngine();
+  if (!resourcesStore.view('settings').some(item => item.id === 'resources') && !isApiOnline()) {
+    await resourcesStore.put('settings', 'resources', initialResourceSettings());
   }
   syncInitialized = true;
   localStorage.setItem(scopeKey, initialScope);
@@ -4210,7 +5180,10 @@ if (!FEATURES.conversation) {
 })().catch(error => {
   document.body.inert = false;
   const status = document.querySelector('#saveStatus');
-  if (status) status.textContent = '同步初始化失败；原始数据和草稿未清除，请勿清理浏览器数据。';
+  if (status) {
+    status.dataset.state = 'error';
+    status.innerHTML = '<span class="local-save-dot" aria-hidden="true"></span><span class="save-status-copy">初始化失败</span>';
+  }
   console.error('同步初始化失败：', error);
   const { notify } = createFeedback(selector => document.querySelector(selector));
   notify(`同步初始化失败：${error.message}。请保留本机数据，勿直接覆盖恢复备份。`, 'error');
