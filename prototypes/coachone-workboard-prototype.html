@@ -1,0 +1,1728 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CoachOne · 工作板原型</title>
+  <style>
+    :root {
+      --ink: #17231c;
+      --ink-soft: #435047;
+      --cream: #f4f0e7;
+      --board: #3f614d;
+      --board-line: rgba(220, 236, 223, 0.13);
+      --board-line-strong: rgba(220, 236, 223, 0.18);
+      --toolbar: rgba(35, 61, 45, 0.9);
+      --paper-yellow: #f2e79f;
+      --paper-peach: #f0c9b7;
+      --paper-lilac: #d9cff0;
+      --paper-white: #f3efe7;
+      --paper-mint: #cfe1ce;
+      --line: rgba(22, 34, 27, 0.72);
+      --shadow: 8px 10px 0 rgba(20, 31, 24, 0.2), 0 15px 30px rgba(17, 28, 21, 0.17);
+      --sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --mono: "SFMono-Regular", "Cascadia Code", "Roboto Mono", ui-monospace, monospace;
+      --hand: "Kaiti SC", "STKaiti", "Songti SC", serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      min-width: 320px;
+      background: var(--board);
+    }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      color: var(--cream);
+      font-family: var(--sans);
+      background-color: var(--board);
+      background-image:
+        linear-gradient(var(--board-line-strong) 1px, transparent 1px),
+        linear-gradient(90deg, var(--board-line-strong) 1px, transparent 1px),
+        linear-gradient(var(--board-line) 1px, transparent 1px),
+        linear-gradient(90deg, var(--board-line) 1px, transparent 1px);
+      background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
+      transition: background-color 220ms ease;
+    }
+
+    body::before {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      content: "";
+      opacity: 0.28;
+      background:
+        radial-gradient(circle at 18% 12%, rgba(255, 255, 255, 0.08), transparent 28%),
+        radial-gradient(circle at 86% 78%, rgba(5, 19, 11, 0.16), transparent 34%);
+    }
+
+    body[data-theme="ink"] {
+      --board: #334554;
+      --toolbar: rgba(37, 52, 64, 0.92);
+      --board-line: rgba(222, 234, 242, 0.1);
+      --board-line-strong: rgba(222, 234, 242, 0.16);
+    }
+
+    body[data-theme="cork"] {
+      --board: #78614b;
+      --toolbar: rgba(89, 67, 48, 0.92);
+      --board-line: rgba(255, 242, 220, 0.09);
+      --board-line-strong: rgba(255, 242, 220, 0.15);
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button {
+      color: inherit;
+    }
+
+    button:focus-visible,
+    input:focus-visible,
+    [contenteditable="true"]:focus-visible {
+      outline: 2px solid #fff4b7;
+      outline-offset: 3px;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      min-height: 58px;
+      padding: 0 clamp(18px, 3vw, 46px);
+      border-bottom: 1px solid rgba(231, 242, 232, 0.17);
+      background: var(--toolbar);
+      box-shadow: 0 5px 18px rgba(18, 30, 22, 0.1);
+      backdrop-filter: blur(14px);
+    }
+
+    .brand {
+      display: inline-flex;
+      gap: 10px;
+      align-items: center;
+      width: max-content;
+      color: #f7f3e9;
+      text-decoration: none;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-mark {
+      position: relative;
+      width: 17px;
+      height: 17px;
+      border: 1px solid rgba(255, 255, 255, 0.7);
+      background:
+        linear-gradient(90deg, transparent 47%, rgba(255,255,255,.55) 48%, rgba(255,255,255,.55) 52%, transparent 53%),
+        linear-gradient(transparent 47%, rgba(255,255,255,.55) 48%, rgba(255,255,255,.55) 52%, transparent 53%);
+      transform: rotate(4deg);
+    }
+
+    .brand strong {
+      font-size: 15px;
+      font-weight: 650;
+    }
+
+    .brand small {
+      padding-left: 10px;
+      border-left: 1px solid rgba(255,255,255,.22);
+      color: rgba(244, 240, 231, 0.62);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+    }
+
+    .day-stamp {
+      display: flex;
+      gap: 10px;
+      align-items: baseline;
+      justify-self: center;
+      color: rgba(247, 243, 233, 0.76);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.04em;
+    }
+
+    .day-stamp b {
+      color: #f7f3e9;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .toolbar-actions {
+      display: flex;
+      gap: 7px;
+      align-items: center;
+      justify-self: end;
+    }
+
+    .tool-button,
+    .dock-button {
+      display: inline-flex;
+      gap: 7px;
+      align-items: center;
+      justify-content: center;
+      min-height: 32px;
+      padding: 0 10px;
+      border: 1px solid rgba(246, 241, 230, 0.2);
+      border-radius: 2px;
+      background: rgba(255, 255, 255, 0.06);
+      cursor: pointer;
+      font-size: 11px;
+      letter-spacing: 0.02em;
+      transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
+    }
+
+    .tool-button:hover,
+    .dock-button:hover,
+    .tool-button[aria-pressed="true"] {
+      border-color: rgba(246, 241, 230, 0.48);
+      background: rgba(255, 255, 255, 0.13);
+    }
+
+    .tool-button:active,
+    .dock-button:active {
+      transform: translateY(1px);
+    }
+
+    .tool-button.primary {
+      border-color: #e9df95;
+      background: #efe59c;
+      color: #1b2a20;
+      font-weight: 650;
+    }
+
+    .tool-button.primary:hover {
+      background: #f8efac;
+    }
+
+    .tool-icon {
+      font-family: var(--mono);
+      font-size: 14px;
+      line-height: 1;
+    }
+
+    .search {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .search svg {
+      position: absolute;
+      left: 9px;
+      width: 14px;
+      pointer-events: none;
+    }
+
+    .search input {
+      width: 32px;
+      height: 32px;
+      padding: 0 9px 0 30px;
+      border: 1px solid rgba(246, 241, 230, 0.2);
+      border-radius: 2px;
+      background: rgba(255,255,255,.06);
+      color: #fff;
+      cursor: pointer;
+      transition: width 180ms ease, background 180ms ease;
+    }
+
+    .search input::placeholder {
+      color: transparent;
+    }
+
+    .search input:focus,
+    .search input:not(:placeholder-shown) {
+      width: 150px;
+      background: rgba(255,255,255,.12);
+      cursor: text;
+    }
+
+    .search input:focus::placeholder {
+      color: rgba(255,255,255,.55);
+    }
+
+    main {
+      width: min(1450px, 100%);
+      margin: 0 auto;
+      padding: clamp(24px, 3vw, 43px) clamp(18px, 3vw, 46px) 32px;
+    }
+
+    .board-intro {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      margin: 0 0 23px;
+      color: rgba(246, 241, 230, 0.82);
+    }
+
+    .board-intro h1 {
+      margin: 0 0 5px;
+      color: #fbf6e9;
+      font-family: var(--hand);
+      font-size: clamp(21px, 2vw, 29px);
+      font-weight: 600;
+      letter-spacing: 0.03em;
+    }
+
+    .board-intro p {
+      margin: 0;
+      font-size: 11px;
+      letter-spacing: 0.04em;
+    }
+
+    .board-status {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .board-status::before {
+      width: 7px;
+      height: 7px;
+      border: 1px solid rgba(255,255,255,.55);
+      background: #c9df9b;
+      box-shadow: 0 0 0 3px rgba(201,223,155,.12);
+      content: "";
+    }
+
+    .board {
+      display: grid;
+      grid-template-columns: minmax(250px, 1.04fr) minmax(250px, 1fr) minmax(270px, 1.08fr);
+      grid-template-rows: 216px minmax(318px, auto);
+      gap: clamp(18px, 2vw, 28px);
+      align-items: stretch;
+    }
+
+    .board-item {
+      position: relative;
+      min-width: 0;
+      color: var(--ink);
+      transition: opacity 150ms ease, transform 150ms ease, filter 150ms ease;
+    }
+
+    .board-item[hidden] {
+      display: none !important;
+    }
+
+    .board-item[data-slot="a"] {
+      grid-column: 1;
+      grid-row: 1 / span 2;
+    }
+
+    .board-item[data-slot="b"] {
+      grid-column: 2;
+      grid-row: 1;
+    }
+
+    .board-item[data-slot="c"] {
+      grid-column: 2;
+      grid-row: 2;
+    }
+
+    .board-item[data-slot="d"] {
+      grid-column: 3;
+      grid-row: 1;
+    }
+
+    .board-item[data-slot="e"] {
+      grid-column: 3;
+      grid-row: 2;
+    }
+
+    .board-item:not([data-slot]),
+    .board-item[data-slot=""] {
+      min-height: 280px;
+    }
+
+    .paper {
+      --paper: var(--paper-white);
+      isolation: isolate;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      overflow: hidden;
+      padding: clamp(20px, 2.4vw, 31px);
+      border: 1px solid var(--line);
+      border-radius: 1px;
+      background:
+        radial-gradient(circle at 20% 8%, rgba(255,255,255,.42), transparent 30%),
+        linear-gradient(104deg, rgba(255,255,255,.12), transparent 40%, rgba(79,65,38,.035)),
+        var(--paper);
+      box-shadow: var(--shadow);
+    }
+
+    .paper::before {
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      background-image:
+        repeating-linear-gradient(0deg, rgba(44, 36, 21, 0.018) 0, rgba(44, 36, 21, 0.018) 1px, transparent 1px, transparent 4px),
+        radial-gradient(circle, rgba(33, 33, 25, 0.055) 0.5px, transparent 0.7px);
+      background-size: auto, 7px 7px;
+      mix-blend-mode: multiply;
+      content: "";
+      opacity: 0.5;
+    }
+
+    .board-item[data-tone="yellow"] {
+      --paper: var(--paper-yellow);
+    }
+
+    .board-item[data-tone="peach"] {
+      --paper: var(--paper-peach);
+    }
+
+    .board-item[data-tone="lilac"] {
+      --paper: var(--paper-lilac);
+    }
+
+    .board-item[data-tone="white"] {
+      --paper: var(--paper-white);
+    }
+
+    .board-item[data-tone="mint"] {
+      --paper: var(--paper-mint);
+    }
+
+    .tape {
+      position: absolute;
+      top: -11px;
+      left: 50%;
+      z-index: 4;
+      width: 96px;
+      height: 27px;
+      border-right: 1px solid rgba(91,77,53,.13);
+      border-left: 1px solid rgba(91,77,53,.13);
+      background:
+        repeating-linear-gradient(90deg, rgba(255,255,255,.06) 0 2px, rgba(120,96,62,.03) 2px 3px),
+        rgba(235, 222, 190, 0.74);
+      box-shadow: 0 2px 5px rgba(39,32,23,.1);
+      content: "";
+      transform: translateX(-50%) rotate(1.2deg);
+      backdrop-filter: blur(1px);
+    }
+
+    .tape::before,
+    .tape::after {
+      position: absolute;
+      top: 0;
+      width: 8px;
+      height: 100%;
+      background: inherit;
+      clip-path: polygon(0 0, 100% 6%, 72% 16%, 100% 27%, 74% 40%, 100% 50%, 70% 62%, 100% 75%, 72% 88%, 100% 100%, 0 100%);
+      content: "";
+    }
+
+    .tape::before {
+      left: -7px;
+      transform: scaleX(-1);
+    }
+
+    .tape::after {
+      right: -7px;
+    }
+
+    .paper-head {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 18px;
+      padding-bottom: 11px;
+      border-bottom: 1px solid rgba(24,34,27,.31);
+    }
+
+    .paper-head > div:first-child {
+      min-width: 0;
+    }
+
+    .eyebrow {
+      display: block;
+      margin-bottom: 6px;
+      color: rgba(23,35,28,.62);
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .paper h2,
+    .notebook-page h2 {
+      margin: 0;
+      font-family: var(--hand);
+      font-size: clamp(20px, 2vw, 27px);
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      line-height: 1.15;
+    }
+
+    .compact h2 {
+      font-size: clamp(18px, 1.65vw, 23px);
+    }
+
+    .card-actions {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+      opacity: 0.42;
+      transition: opacity 140ms ease;
+    }
+
+    .board-item:hover .card-actions,
+    .arrange-mode .card-actions {
+      opacity: 1;
+    }
+
+    .card-action,
+    .drag-handle {
+      display: grid;
+      width: 25px;
+      height: 25px;
+      padding: 0;
+      border: 1px solid rgba(21,34,26,.24);
+      border-radius: 1px;
+      background: rgba(255,255,255,.14);
+      color: rgba(20,31,24,.78);
+      cursor: pointer;
+      place-items: center;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1;
+    }
+
+    .drag-handle {
+      cursor: grab;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .arrange-mode .drag-handle {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .arrange-mode .board-item {
+      cursor: grab;
+    }
+
+    .arrange-mode .board-item::after {
+      position: absolute;
+      inset: 6px;
+      z-index: 8;
+      border: 1px dashed rgba(20,31,24,.36);
+      pointer-events: none;
+      content: "";
+    }
+
+    .board-item.is-dragging {
+      opacity: 0.48;
+      filter: saturate(.6);
+      transform: rotate(-1deg) scale(.985);
+    }
+
+    .board-item.is-drop-target {
+      transform: translateY(-4px);
+    }
+
+    [data-editable="true"] {
+      border-radius: 1px;
+      transition: background 120ms ease, box-shadow 120ms ease;
+    }
+
+    [data-editable="true"]:hover {
+      background: rgba(255,255,255,.12);
+      box-shadow: 0 0 0 3px rgba(255,255,255,.12);
+    }
+
+    [data-editable="true"]:focus {
+      background: rgba(255,255,255,.2);
+      outline: 1px dashed rgba(20,31,24,.5);
+      outline-offset: 4px;
+    }
+
+    .document-meta {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 23px;
+      color: rgba(23,35,28,.65);
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: .03em;
+    }
+
+    .document-meta span + span {
+      padding-left: 10px;
+      border-left: 1px solid rgba(20,31,24,.25);
+    }
+
+    .task-list {
+      display: grid;
+      gap: 15px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .task-list label {
+      display: grid;
+      grid-template-columns: 19px 1fr auto;
+      gap: 10px;
+      align-items: start;
+      cursor: pointer;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .task-list input {
+      width: 15px;
+      height: 15px;
+      margin: 2px 0 0;
+      accent-color: #405e48;
+    }
+
+    .task-list small {
+      color: rgba(23,35,28,.56);
+      font-family: var(--mono);
+      font-size: 9px;
+    }
+
+    .quote-note {
+      position: relative;
+      margin: 27px 0 22px;
+      padding: 15px 0 15px 18px;
+      border-top: 1px solid rgba(20,31,24,.17);
+      border-bottom: 1px solid rgba(20,31,24,.17);
+      color: rgba(23,35,28,.75);
+      font-family: var(--hand);
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    .quote-note::before {
+      position: absolute;
+      top: 10px;
+      left: 0;
+      color: rgba(23,35,28,.38);
+      content: "“";
+      font-size: 24px;
+    }
+
+    .paper-foot {
+      display: flex;
+      gap: 16px;
+      align-items: flex-end;
+      justify-content: space-between;
+      margin-top: auto;
+      padding-top: 16px;
+      border-top: 1px solid rgba(20,31,24,.28);
+    }
+
+    .progress-label {
+      flex: 1;
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+
+    .progress-bar {
+      height: 5px;
+      margin-top: 8px;
+      border: 1px solid rgba(20,31,24,.34);
+      background: rgba(255,255,255,.15);
+    }
+
+    .progress-bar span {
+      display: block;
+      width: 64%;
+      height: 100%;
+      background: #385845;
+    }
+
+    .paper-link {
+      padding: 7px 9px;
+      border: 1px solid rgba(20,31,24,.42);
+      background: rgba(255,255,255,.22);
+      color: var(--ink);
+      cursor: pointer;
+      font-size: 10px;
+      font-weight: 650;
+      text-decoration: none;
+    }
+
+    .review-count {
+      display: flex;
+      align-items: baseline;
+      margin: 2px 0 12px;
+      font-family: var(--hand);
+    }
+
+    .review-count strong {
+      font-size: 42px;
+      font-weight: 500;
+      line-height: .9;
+    }
+
+    .review-count span {
+      margin-left: 8px;
+      color: rgba(23,35,28,.64);
+      font-size: 12px;
+    }
+
+    .review-breakdown {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0;
+      margin-top: auto;
+      border-top: 1px solid rgba(20,31,24,.28);
+    }
+
+    .review-breakdown div {
+      padding: 11px 9px 0 0;
+      border-right: 1px solid rgba(20,31,24,.2);
+    }
+
+    .review-breakdown div + div {
+      padding-left: 10px;
+    }
+
+    .review-breakdown div:last-child {
+      border-right: 0;
+    }
+
+    .review-breakdown b {
+      display: block;
+      font-family: var(--mono);
+      font-size: 13px;
+    }
+
+    .review-breakdown small {
+      color: rgba(23,35,28,.58);
+      font-size: 9px;
+    }
+
+    .phrase-list {
+      display: grid;
+      gap: 0;
+      margin: -2px 0 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .phrase-list li {
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      padding: 14px 0;
+      border-bottom: 1px solid rgba(20,31,24,.2);
+    }
+
+    .phrase-list li:last-child {
+      border-bottom: 0;
+    }
+
+    .phrase-index {
+      color: rgba(23,35,28,.48);
+      font-family: var(--mono);
+      font-size: 9px;
+    }
+
+    .phrase-list strong {
+      display: block;
+      overflow: hidden;
+      font-family: var(--hand);
+      font-size: 17px;
+      font-weight: 600;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .phrase-list small {
+      display: block;
+      margin-top: 3px;
+      color: rgba(23,35,28,.58);
+      font-size: 10px;
+    }
+
+    .phrase-level {
+      padding: 3px 5px;
+      border: 1px solid rgba(20,31,24,.3);
+      font-family: var(--mono);
+      font-size: 8px;
+    }
+
+    .fold {
+      position: absolute;
+      right: -1px;
+      bottom: -1px;
+      z-index: 3;
+      width: 39px;
+      height: 39px;
+      border-top: 1px solid rgba(20,31,24,.45);
+      border-left: 1px solid rgba(20,31,24,.45);
+      background:
+        linear-gradient(135deg, rgba(0,0,0,.08), transparent 42%),
+        color-mix(in srgb, var(--paper) 78%, white);
+      box-shadow: -5px -5px 10px rgba(31,30,25,.07);
+      clip-path: polygon(0 0, 100% 100%, 0 100%);
+    }
+
+    .rhythm {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 17px;
+      align-items: end;
+      margin-top: auto;
+    }
+
+    .chart {
+      display: flex;
+      gap: 5px;
+      align-items: end;
+      height: 66px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid rgba(20,31,24,.34);
+    }
+
+    .chart i {
+      position: relative;
+      display: block;
+      flex: 1;
+      height: var(--h);
+      max-width: 25px;
+      border: 1px solid rgba(20,31,24,.45);
+      background: repeating-linear-gradient(-45deg, rgba(49,75,58,.8) 0 2px, transparent 2px 4px);
+    }
+
+    .chart i::after {
+      position: absolute;
+      top: calc(100% + 5px);
+      left: 50%;
+      color: rgba(23,35,28,.5);
+      content: attr(data-day);
+      font-family: var(--mono);
+      font-size: 7px;
+      transform: translateX(-50%);
+    }
+
+    .streak {
+      text-align: right;
+    }
+
+    .streak strong {
+      display: block;
+      font-family: var(--hand);
+      font-size: 35px;
+      font-weight: 500;
+      line-height: 1;
+    }
+
+    .streak small {
+      color: rgba(23,35,28,.58);
+      font-size: 9px;
+    }
+
+    .notebook-card {
+      isolation: isolate;
+      padding: 0 13px 11px 18px;
+      filter: drop-shadow(8px 12px 9px rgba(18,29,21,.22));
+    }
+
+    .notebook-cover {
+      position: relative;
+      height: 100%;
+      min-height: 318px;
+      padding: 10px 11px 10px 37px;
+      border: 1px solid #20261f;
+      border-radius: 5px 8px 8px 5px;
+      background:
+        repeating-linear-gradient(90deg, rgba(255,255,255,.025) 0 1px, transparent 1px 3px),
+        #41483d;
+      box-shadow: inset 0 0 0 2px rgba(255,255,255,.05), inset -8px 0 15px rgba(0,0,0,.15);
+    }
+
+    .notebook-cover::before {
+      position: absolute;
+      top: 8px;
+      bottom: 8px;
+      left: 20px;
+      width: 8px;
+      border-right: 1px solid rgba(255,255,255,.12);
+      border-left: 1px solid rgba(0,0,0,.25);
+      background: rgba(22,29,23,.22);
+      content: "";
+    }
+
+    .notebook-page {
+      position: relative;
+      z-index: 2;
+      height: 100%;
+      min-height: 296px;
+      overflow: hidden;
+      padding: 26px 25px 20px 29px;
+      border: 1px solid rgba(50,43,32,.58);
+      border-radius: 2px 10px 10px 2px;
+      background:
+        linear-gradient(90deg, transparent 0 20px, rgba(194,90,77,.24) 20px 21px, transparent 21px),
+        repeating-linear-gradient(0deg, transparent 0 27px, rgba(59,92,121,.18) 27px 28px),
+        #f4f0e6;
+      box-shadow: 3px 0 0 #d8d0c2, 6px 0 0 #b9b1a5, inset 10px 0 18px rgba(75,58,39,.08);
+    }
+
+    .notebook-page .paper-head {
+      margin-bottom: 8px;
+      padding-bottom: 9px;
+      border-bottom: 0;
+    }
+
+    .notebook-page h2 {
+      font-size: 25px;
+    }
+
+    .notebook-list {
+      display: grid;
+      gap: 0;
+      margin: 3px 0 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .notebook-list li {
+      display: grid;
+      grid-template-columns: 21px minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      min-height: 42px;
+      border-bottom: 1px solid rgba(59,92,121,.16);
+      font-family: var(--hand);
+      font-size: 15px;
+    }
+
+    .notebook-list li[hidden] {
+      display: none;
+    }
+
+    .notebook-list .symbol {
+      color: rgba(27,42,33,.55);
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+
+    .notebook-list small {
+      color: rgba(27,42,33,.47);
+      font-family: var(--mono);
+      font-size: 8px;
+      text-transform: uppercase;
+    }
+
+    .book-tabs {
+      position: absolute;
+      top: 23px;
+      right: -13px;
+      z-index: 1;
+      display: grid;
+      gap: 6px;
+    }
+
+    .book-tab {
+      width: 37px;
+      height: 35px;
+      padding: 0 0 0 10px;
+      border: 1px solid rgba(25,31,25,.64);
+      border-left: 0;
+      border-radius: 0 4px 4px 0;
+      background: #ead18c;
+      color: #27352c;
+      cursor: pointer;
+      font-family: var(--mono);
+      font-size: 8px;
+      text-align: center;
+      transition: transform 140ms ease;
+    }
+
+    .book-tab:nth-child(2) {
+      background: #cabce6;
+    }
+
+    .book-tab:nth-child(3) {
+      background: #d7ddbd;
+    }
+
+    .book-tab:hover,
+    .book-tab[aria-pressed="true"] {
+      transform: translateX(5px);
+    }
+
+    .bookmark-ribbon {
+      position: absolute;
+      bottom: -17px;
+      left: 54%;
+      z-index: 4;
+      width: 14px;
+      height: 43px;
+      background: #b54f3d;
+      clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 76%, 0 100%);
+      filter: drop-shadow(1px 2px 1px rgba(0,0,0,.2));
+    }
+
+    .custom-note .note-copy {
+      min-height: 120px;
+      color: rgba(23,35,28,.78);
+      font-family: var(--hand);
+      font-size: 16px;
+      line-height: 1.75;
+      white-space: pre-wrap;
+    }
+
+    .dock {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 27px;
+      padding: 11px 13px;
+      border: 1px solid rgba(245,240,229,.16);
+      background: rgba(29,48,36,.38);
+      color: rgba(246,241,230,.67);
+      backdrop-filter: blur(8px);
+    }
+
+    .dock p {
+      margin: 0;
+      font-size: 10px;
+      letter-spacing: .04em;
+    }
+
+    .dock p strong {
+      color: rgba(246,241,230,.95);
+      font-weight: 600;
+    }
+
+    .dock-actions {
+      display: flex;
+      gap: 7px;
+      flex-shrink: 0;
+    }
+
+    .dock-button {
+      min-height: 28px;
+      font-size: 9px;
+    }
+
+    .toast {
+      position: fixed;
+      right: 25px;
+      bottom: 24px;
+      z-index: 100;
+      padding: 10px 13px;
+      border: 1px solid rgba(255,255,255,.24);
+      background: #263d2f;
+      box-shadow: 5px 6px 0 rgba(18,29,22,.24);
+      color: #f7f1e5;
+      font-size: 11px;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(8px);
+      transition: opacity 160ms ease, transform 160ms ease;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .empty-search {
+      display: none;
+      grid-column: 1 / -1;
+      min-height: 220px;
+      border: 1px dashed rgba(255,255,255,.28);
+      color: rgba(255,255,255,.66);
+      place-items: center;
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+
+    .empty-search.show {
+      display: grid;
+    }
+
+    @media (max-width: 1060px) {
+      .topbar {
+        grid-template-columns: 1fr auto;
+      }
+
+      .day-stamp {
+        display: none;
+      }
+
+      .board {
+        grid-template-columns: minmax(260px, 1fr) minmax(280px, 1fr);
+        grid-template-rows: 216px minmax(318px, auto) minmax(318px, auto);
+      }
+
+      .board-item[data-slot="a"] {
+        grid-column: 1;
+        grid-row: 1 / span 2;
+      }
+
+      .board-item[data-slot="b"] {
+        grid-column: 2;
+        grid-row: 1;
+      }
+
+      .board-item[data-slot="c"] {
+        grid-column: 2;
+        grid-row: 2;
+      }
+
+      .board-item[data-slot="d"] {
+        grid-column: 1;
+        grid-row: 3;
+      }
+
+      .board-item[data-slot="e"] {
+        grid-column: 2;
+        grid-row: 3;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .topbar {
+        position: relative;
+        gap: 13px;
+        padding-top: 11px;
+        padding-bottom: 11px;
+      }
+
+      .brand small,
+      .tool-button span:not(.tool-icon),
+      .search {
+        display: none;
+      }
+
+      .board-intro {
+        align-items: flex-start;
+      }
+
+      .board-status {
+        margin-top: 8px;
+      }
+
+      .board {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .board-item {
+        min-height: 300px;
+      }
+
+      .board-item[data-slot="a"] {
+        min-height: 510px;
+      }
+
+      .dock {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .dock-actions {
+        width: 100%;
+      }
+
+      .dock-button {
+        flex: 1;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+<body data-theme="forest">
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="CoachOne 工作台">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <strong>CoachOne</strong>
+      <small>学习工作台</small>
+    </a>
+
+    <div class="day-stamp" aria-label="当前日期">
+      <span id="weekday">TUESDAY</span>
+      <b id="currentDate">2026.11.24</b>
+    </div>
+
+    <div class="toolbar-actions">
+      <label class="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+          <circle cx="11" cy="11" r="6.5"></circle>
+          <path d="m16 16 4 4"></path>
+        </svg>
+        <input id="boardSearch" type="search" placeholder="搜索便签…" aria-label="搜索工作板">
+      </label>
+      <button class="tool-button" id="themeButton" type="button" title="切换工作板背景">
+        <span class="tool-icon" aria-hidden="true">◐</span><span>背景</span>
+      </button>
+      <button class="tool-button" id="arrangeButton" type="button" aria-pressed="false" title="进入整理模式">
+        <span class="tool-icon" aria-hidden="true">⌘</span><span>整理</span>
+      </button>
+      <button class="tool-button primary" id="addNoteButton" type="button">
+        <span class="tool-icon" aria-hidden="true">＋</span><span>新便签</span>
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <div class="board-intro">
+      <div>
+        <h1 data-editable="true" contenteditable="true" spellcheck="false">早上好，YEFEI</h1>
+        <p data-editable="true" contenteditable="true" spellcheck="false">把今天想完成的事情，放到看得见的地方。</p>
+      </div>
+      <div class="board-status">已在本机保存</div>
+    </div>
+
+    <section class="board" id="board" aria-label="可编辑学习工作板">
+      <article class="board-item paper" data-id="current-note" data-slot="a" data-tone="yellow">
+        <span class="tape" aria-hidden="true"></span>
+        <header class="paper-head">
+          <div>
+            <span class="eyebrow">Current note · 01</span>
+            <h2 data-editable="true" contenteditable="true" spellcheck="false">荷兰语 · 今日练习</h2>
+          </div>
+          <div class="card-actions">
+            <button class="drag-handle" type="button" aria-label="拖动便签">⠿</button>
+            <button class="card-action" type="button" data-action="color" aria-label="更换便签颜色" title="更换颜色">◒</button>
+            <button class="card-action" type="button" data-action="delete" aria-label="删除便签" title="删除">×</button>
+          </div>
+        </header>
+
+        <div class="document-meta">
+          <span>NL · DUTCH</span>
+          <span>25 MIN</span>
+          <span>24 NOV</span>
+        </div>
+
+        <ul class="task-list">
+          <li>
+            <label>
+              <input type="checkbox" checked>
+              <span data-editable="true" contenteditable="true" spellcheck="false">跟读新闻片段，标记重音</span>
+              <small>08:30</small>
+            </label>
+          </li>
+          <li>
+            <label>
+              <input type="checkbox">
+              <span data-editable="true" contenteditable="true" spellcheck="false">整理 8 个常用词伙</span>
+              <small>10 MIN</small>
+            </label>
+          </li>
+          <li>
+            <label>
+              <input type="checkbox">
+              <span data-editable="true" contenteditable="true" spellcheck="false">录一遍口语复述</span>
+              <small>05 MIN</small>
+            </label>
+          </li>
+        </ul>
+
+        <blockquote class="quote-note" data-editable="true" contenteditable="true" spellcheck="false">
+          Niet perfect spreken, wel blijven spreken.
+        </blockquote>
+
+        <footer class="paper-foot">
+          <div class="progress-label">
+            今日进度 · 64%
+            <div class="progress-bar" aria-label="今日进度 64%"><span></span></div>
+          </div>
+          <button class="paper-link" type="button" data-toast="这是原型入口，之后可接回当前编辑器。">继续笔记 ↗</button>
+        </footer>
+        <span class="fold" aria-hidden="true"></span>
+      </article>
+
+      <article class="board-item paper compact" data-id="daily-review" data-slot="b" data-tone="peach">
+        <span class="tape" aria-hidden="true"></span>
+        <header class="paper-head">
+          <div>
+            <span class="eyebrow">Due today · 02</span>
+            <h2 data-editable="true" contenteditable="true" spellcheck="false">今日复习</h2>
+          </div>
+          <div class="card-actions">
+            <button class="drag-handle" type="button" aria-label="拖动便签">⠿</button>
+            <button class="card-action" type="button" data-action="color" aria-label="更换便签颜色">◒</button>
+            <button class="card-action" type="button" data-action="delete" aria-label="删除便签">×</button>
+          </div>
+        </header>
+        <div class="review-count"><strong>12</strong><span>张词卡等你复习</span></div>
+        <div class="review-breakdown">
+          <div><b>5</b><small>新词</small></div>
+          <div><b>4</b><small>模糊</small></div>
+          <div><b>3</b><small>熟悉</small></div>
+        </div>
+      </article>
+
+      <article class="board-item paper" data-id="phrase-cards" data-slot="c" data-tone="lilac">
+        <span class="tape" aria-hidden="true"></span>
+        <header class="paper-head">
+          <div>
+            <span class="eyebrow">Phrase cards · 03</span>
+            <h2 data-editable="true" contenteditable="true" spellcheck="false">词卡便签</h2>
+          </div>
+          <div class="card-actions">
+            <button class="drag-handle" type="button" aria-label="拖动便签">⠿</button>
+            <button class="card-action" type="button" data-action="color" aria-label="更换便签颜色">◒</button>
+            <button class="card-action" type="button" data-action="delete" aria-label="删除便签">×</button>
+          </div>
+        </header>
+        <ol class="phrase-list">
+          <li>
+            <span class="phrase-index">01</span>
+            <span><strong data-editable="true" contenteditable="true" spellcheck="false">er zin in hebben</strong><small data-editable="true" contenteditable="true">期待、很想做某事</small></span>
+            <span class="phrase-level">NEW</span>
+          </li>
+          <li>
+            <span class="phrase-index">02</span>
+            <span><strong data-editable="true" contenteditable="true" spellcheck="false">dat hangt ervan af</strong><small data-editable="true" contenteditable="true">那要看情况</small></span>
+            <span class="phrase-level">DUE</span>
+          </li>
+          <li>
+            <span class="phrase-index">03</span>
+            <span><strong data-editable="true" contenteditable="true" spellcheck="false">in ieder geval</strong><small data-editable="true" contenteditable="true">无论如何</small></span>
+            <span class="phrase-level">OK</span>
+          </li>
+        </ol>
+        <span class="fold" aria-hidden="true"></span>
+      </article>
+
+      <article class="board-item paper compact" data-id="learning-rhythm" data-slot="d" data-tone="white">
+        <span class="tape" aria-hidden="true"></span>
+        <header class="paper-head">
+          <div>
+            <span class="eyebrow">This week · 04</span>
+            <h2 data-editable="true" contenteditable="true" spellcheck="false">学习节奏</h2>
+          </div>
+          <div class="card-actions">
+            <button class="drag-handle" type="button" aria-label="拖动便签">⠿</button>
+            <button class="card-action" type="button" data-action="color" aria-label="更换便签颜色">◒</button>
+            <button class="card-action" type="button" data-action="delete" aria-label="删除便签">×</button>
+          </div>
+        </header>
+        <div class="rhythm">
+          <div class="chart" aria-label="最近七天学习时长">
+            <i style="--h:36%" data-day="M"></i>
+            <i style="--h:62%" data-day="T"></i>
+            <i style="--h:48%" data-day="W"></i>
+            <i style="--h:78%" data-day="T"></i>
+            <i style="--h:54%" data-day="F"></i>
+            <i style="--h:86%" data-day="S"></i>
+            <i style="--h:68%" data-day="S"></i>
+          </div>
+          <div class="streak"><strong>7</strong><small>连续学习 / 天</small></div>
+        </div>
+      </article>
+
+      <article class="board-item notebook-card" data-id="favorites" data-slot="e">
+        <div class="notebook-cover">
+          <div class="notebook-page">
+            <header class="paper-head">
+              <div>
+                <span class="eyebrow">Collections · 05</span>
+                <h2 data-editable="true" contenteditable="true" spellcheck="false">收藏夹</h2>
+              </div>
+              <div class="card-actions">
+                <button class="drag-handle" type="button" aria-label="拖动笔记本">⠿</button>
+                <button class="card-action" type="button" data-action="delete" aria-label="删除笔记本">×</button>
+              </div>
+            </header>
+            <ul class="notebook-list" id="favoriteList">
+              <li data-kind="video"><span class="symbol">▶</span><span data-editable="true" contenteditable="true" spellcheck="false">荷兰语发音：R 与 G</span><small>视频</small></li>
+              <li data-kind="article"><span class="symbol">↗</span><span data-editable="true" contenteditable="true" spellcheck="false">常见可分动词整理</span><small>文章</small></li>
+              <li data-kind="video"><span class="symbol">▶</span><span data-editable="true" contenteditable="true" spellcheck="false">慢速新闻跟读清单</span><small>视频</small></li>
+              <li data-kind="article"><span class="symbol">↗</span><span data-editable="true" contenteditable="true" spellcheck="false">本周语法：语序</span><small>文章</small></li>
+            </ul>
+          </div>
+          <nav class="book-tabs" aria-label="收藏夹分类">
+            <button class="book-tab" type="button" data-filter="all" aria-pressed="true">全部</button>
+            <button class="book-tab" type="button" data-filter="video" aria-pressed="false">视频</button>
+            <button class="book-tab" type="button" data-filter="article" aria-pressed="false">文章</button>
+          </nav>
+          <span class="bookmark-ribbon" aria-hidden="true"></span>
+        </div>
+      </article>
+
+      <div class="empty-search" id="emptySearch">没有找到对应便签</div>
+    </section>
+
+    <footer class="dock">
+      <p><strong>原型操作：</strong>直接点击文字修改；“整理”模式可拖拽模块；颜色、勾选状态与新增便签会自动保存在浏览器。</p>
+      <div class="dock-actions">
+        <button class="dock-button" id="downloadButton" type="button">导出当前 HTML</button>
+        <button class="dock-button" id="resetButton" type="button">恢复样例</button>
+      </div>
+    </footer>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    (() => {
+      const STORAGE_KEY = "coachone-workboard-prototype-v1";
+      const themes = ["forest", "ink", "cork"];
+      const tones = ["yellow", "peach", "lilac", "white", "mint"];
+      const board = document.querySelector("#board");
+      const initialBoard = board.innerHTML;
+      const introTitle = document.querySelector(".board-intro h1");
+      const introCopy = document.querySelector(".board-intro p");
+      const initialIntro = {
+        title: introTitle.textContent,
+        copy: introCopy.textContent
+      };
+      const arrangeButton = document.querySelector("#arrangeButton");
+      const themeButton = document.querySelector("#themeButton");
+      const addNoteButton = document.querySelector("#addNoteButton");
+      const searchInput = document.querySelector("#boardSearch");
+      const emptySearch = document.querySelector("#emptySearch");
+      const toast = document.querySelector("#toast");
+      let arrangeMode = false;
+      let draggedCard = null;
+      let saveTimer = 0;
+      let toastTimer = 0;
+
+      const escapeHtml = (value) => String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+
+      function announce(message) {
+        window.clearTimeout(toastTimer);
+        toast.textContent = message;
+        toast.classList.add("show");
+        toastTimer = window.setTimeout(() => toast.classList.remove("show"), 1800);
+      }
+
+      function updateDate() {
+        const now = new Date();
+        document.querySelector("#currentDate").textContent = new Intl.DateTimeFormat("zh-CN", {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit"
+        }).format(now).replaceAll("/", ".");
+        document.querySelector("#weekday").textContent = new Intl.DateTimeFormat("en-US", {
+          weekday: "long"
+        }).format(now).toUpperCase();
+      }
+
+      function serialize() {
+        const boardClone = board.cloneNode(true);
+        boardClone.querySelectorAll(".board-item").forEach((card) => {
+          card.hidden = false;
+          card.classList.remove("is-dragging", "is-drop-target");
+        });
+        boardClone.querySelector(".empty-search")?.classList.remove("show");
+        return {
+          board: boardClone.innerHTML,
+          intro: {
+            title: introTitle.textContent,
+            copy: introCopy.textContent
+          },
+          theme: document.body.dataset.theme || "forest"
+        };
+      }
+
+      function save() {
+        window.clearTimeout(saveTimer);
+        saveTimer = window.setTimeout(() => {
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(serialize()));
+          } catch (error) {
+            console.warn("Prototype state could not be saved.", error);
+          }
+        }, 160);
+      }
+
+      function normalizeBoard() {
+        board.querySelectorAll(".board-item").forEach((card) => {
+          card.draggable = arrangeMode;
+          card.classList.remove("is-dragging", "is-drop-target");
+        });
+        board.querySelectorAll("[data-editable='true']").forEach((element) => {
+          element.contentEditable = arrangeMode ? "false" : "true";
+          element.spellcheck = false;
+        });
+        board.querySelectorAll(".book-tabs").forEach((tabs) => {
+          if (!tabs.querySelector("[aria-pressed='true']")) {
+            tabs.querySelector("[data-filter='all']")?.setAttribute("aria-pressed", "true");
+          }
+        });
+      }
+
+      function restore() {
+        try {
+          const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+          if (stored?.board) board.innerHTML = stored.board;
+          if (stored?.intro?.title) introTitle.textContent = stored.intro.title;
+          if (stored?.intro?.copy) introCopy.textContent = stored.intro.copy;
+          if (themes.includes(stored?.theme)) document.body.dataset.theme = stored.theme;
+        } catch (error) {
+          console.warn("Prototype state could not be restored.", error);
+        }
+        normalizeBoard();
+      }
+
+      function setArrangeMode(nextValue) {
+        arrangeMode = nextValue;
+        document.body.classList.toggle("arrange-mode", arrangeMode);
+        arrangeButton.setAttribute("aria-pressed", String(arrangeMode));
+        arrangeButton.title = arrangeMode ? "退出整理模式" : "进入整理模式";
+        arrangeButton.querySelector("span:last-child").textContent = arrangeMode ? "完成" : "整理";
+        normalizeBoard();
+        announce(arrangeMode ? "整理模式：拖动便签交换位置" : "已回到文字编辑模式");
+      }
+
+      function applyFavoriteFilter(filter, sourceButton) {
+        const card = sourceButton.closest(".notebook-card");
+        card.querySelectorAll(".book-tab").forEach((button) => {
+          button.setAttribute("aria-pressed", String(button === sourceButton));
+        });
+        card.querySelectorAll(".notebook-list li").forEach((item) => {
+          item.hidden = filter !== "all" && item.dataset.kind !== filter;
+        });
+        save();
+      }
+
+      function addNote() {
+        const id = `note-${Date.now()}`;
+        const tone = tones[Math.floor(Math.random() * 3)];
+        const markup = `
+          <article class="board-item paper custom-note" data-id="${id}" data-slot="" data-tone="${tone}">
+            <span class="tape" aria-hidden="true"></span>
+            <header class="paper-head">
+              <div>
+                <span class="eyebrow">Quick note · NEW</span>
+                <h2 data-editable="true" contenteditable="true" spellcheck="false">新便签</h2>
+              </div>
+              <div class="card-actions">
+                <button class="drag-handle" type="button" aria-label="拖动便签">⠿</button>
+                <button class="card-action" type="button" data-action="color" aria-label="更换便签颜色">◒</button>
+                <button class="card-action" type="button" data-action="delete" aria-label="删除便签">×</button>
+              </div>
+            </header>
+            <div class="note-copy" data-editable="true" contenteditable="true" spellcheck="false">点击这里，写下刚刚想到的内容……</div>
+            <span class="fold" aria-hidden="true"></span>
+          </article>`;
+        emptySearch.insertAdjacentHTML("beforebegin", markup);
+        normalizeBoard();
+        const newCard = board.querySelector(`[data-id="${id}"]`);
+        newCard.scrollIntoView({ behavior: "smooth", block: "center" });
+        const title = newCard.querySelector("h2");
+        title.focus();
+        const range = document.createRange();
+        range.selectNodeContents(title);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        save();
+        announce("已添加一张新便签");
+      }
+
+      function removeCard(card) {
+        const label = card.querySelector("h2")?.textContent?.trim() || "这个模块";
+        if (!window.confirm(`确定删除“${label}”吗？可用“恢复样例”找回默认模块。`)) return;
+        card.remove();
+        save();
+        announce("便签已移除");
+      }
+
+      function cycleTone(card) {
+        if (card.classList.contains("notebook-card")) return;
+        const index = tones.indexOf(card.dataset.tone);
+        card.dataset.tone = tones[(index + 1 + tones.length) % tones.length];
+        save();
+        announce("已更换便签纸颜色");
+      }
+
+      function filterBoard(query) {
+        const normalized = query.trim().toLocaleLowerCase();
+        let visible = 0;
+        board.querySelectorAll(".board-item").forEach((card) => {
+          const matches = !normalized || card.innerText.toLocaleLowerCase().includes(normalized);
+          card.hidden = !matches;
+          if (matches) visible += 1;
+        });
+        emptySearch.classList.toggle("show", Boolean(normalized) && visible === 0);
+      }
+
+      function downloadSnapshot() {
+        const clone = document.documentElement.cloneNode(true);
+        clone.querySelector("body").classList.remove("arrange-mode");
+        clone.querySelectorAll(".board-item").forEach((card) => {
+          card.setAttribute("draggable", "false");
+          card.classList.remove("is-dragging", "is-drop-target");
+        });
+        clone.querySelectorAll("[data-editable='true']").forEach((element) => {
+          element.setAttribute("contenteditable", "true");
+        });
+        const blob = new Blob([`<!doctype html>\n${clone.outerHTML}`], { type: "text/html;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = "coachone-workboard-prototype.html";
+        anchor.click();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+        announce("已导出当前 HTML");
+      }
+
+      restore();
+      updateDate();
+
+      arrangeButton.addEventListener("click", () => setArrangeMode(!arrangeMode));
+      addNoteButton.addEventListener("click", addNote);
+
+      themeButton.addEventListener("click", () => {
+        const currentIndex = themes.indexOf(document.body.dataset.theme);
+        const nextTheme = themes[(currentIndex + 1 + themes.length) % themes.length];
+        document.body.dataset.theme = nextTheme;
+        save();
+        announce(`已切换为${nextTheme === "forest" ? "森林绿" : nextTheme === "ink" ? "墨蓝" : "软木棕"}工作板`);
+      });
+
+      searchInput.addEventListener("input", () => filterBoard(searchInput.value));
+
+      board.addEventListener("input", (event) => {
+        if (event.target.matches("[data-editable='true']")) save();
+      });
+
+      board.addEventListener("change", (event) => {
+        if (event.target.matches("input[type='checkbox']")) save();
+      });
+
+      board.addEventListener("click", (event) => {
+        const action = event.target.closest("[data-action]")?.dataset.action;
+        const card = event.target.closest(".board-item");
+        if (action === "color" && card) cycleTone(card);
+        if (action === "delete" && card) removeCard(card);
+
+        const tab = event.target.closest(".book-tab");
+        if (tab) applyFavoriteFilter(tab.dataset.filter, tab);
+
+        const toastTrigger = event.target.closest("[data-toast]");
+        if (toastTrigger) announce(toastTrigger.dataset.toast);
+      });
+
+      board.addEventListener("dragstart", (event) => {
+        if (!arrangeMode) {
+          event.preventDefault();
+          return;
+        }
+        draggedCard = event.target.closest(".board-item");
+        if (!draggedCard) return;
+        draggedCard.classList.add("is-dragging");
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", draggedCard.dataset.id || "");
+      });
+
+      board.addEventListener("dragover", (event) => {
+        if (!arrangeMode || !draggedCard) return;
+        const target = event.target.closest(".board-item");
+        if (!target || target === draggedCard) return;
+        event.preventDefault();
+        board.querySelectorAll(".is-drop-target").forEach((card) => card.classList.remove("is-drop-target"));
+        target.classList.add("is-drop-target");
+      });
+
+      board.addEventListener("drop", (event) => {
+        if (!arrangeMode || !draggedCard) return;
+        const target = event.target.closest(".board-item");
+        if (!target || target === draggedCard) return;
+        event.preventDefault();
+        const sourceSlot = draggedCard.dataset.slot;
+        const targetSlot = target.dataset.slot;
+
+        if (sourceSlot && targetSlot) {
+          const slotGroup = (slot) => slot === "a"
+            ? "tall"
+            : ["b", "d"].includes(slot)
+              ? "short"
+              : "medium";
+          if (slotGroup(sourceSlot) !== slotGroup(targetSlot)) {
+            target.classList.remove("is-drop-target");
+            announce("不同尺寸的模块暂不交换，避免内容被压缩");
+            return;
+          }
+          draggedCard.dataset.slot = targetSlot;
+          target.dataset.slot = sourceSlot;
+        } else {
+          target.insertAdjacentElement("beforebegin", draggedCard);
+        }
+        target.classList.remove("is-drop-target");
+        save();
+        announce("模块位置已调整");
+      });
+
+      board.addEventListener("dragend", () => {
+        board.querySelectorAll(".board-item").forEach((card) => {
+          card.classList.remove("is-dragging", "is-drop-target");
+        });
+        draggedCard = null;
+      });
+
+      document.querySelector(".board-intro").addEventListener("input", save);
+      document.querySelector("#downloadButton").addEventListener("click", downloadSnapshot);
+      document.querySelector("#resetButton").addEventListener("click", () => {
+        if (!window.confirm("恢复最初的原型内容？你在这个页面里的修改会被清除。")) return;
+        window.clearTimeout(saveTimer);
+        localStorage.removeItem(STORAGE_KEY);
+        board.innerHTML = initialBoard;
+        introTitle.textContent = initialIntro.title;
+        introCopy.textContent = initialIntro.copy;
+        document.body.dataset.theme = "forest";
+        searchInput.value = "";
+        setArrangeMode(false);
+        normalizeBoard();
+        announce("已恢复原型样例");
+      });
+
+      document.addEventListener("keydown", (event) => {
+        const typing = event.target.matches("input, [contenteditable='true']");
+        if (!typing && event.key.toLocaleLowerCase() === "n") addNote();
+        if (event.key === "Escape" && arrangeMode) setArrangeMode(false);
+      });
+
+      window.addEventListener("beforeunload", () => {
+        window.clearTimeout(saveTimer);
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(serialize()));
+        } catch (error) {
+          console.warn(error);
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

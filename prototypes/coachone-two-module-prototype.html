@@ -1,0 +1,5190 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CoachOne · Notebook & Collections</title>
+  <style>
+    :root {
+      --board: #315b6d;
+      --board-deep: #214454;
+      --grid-fine: rgba(240, 248, 248, 0.11);
+      --grid-major: rgba(240, 248, 248, 0.2);
+      --blue-action: #2f6695;
+      --ink: #18251d;
+      --ink-soft: #536057;
+      --cream: #f4f0e6;
+      --paper: #f4efe4;
+      --paper-warm: #eee39c;
+      --paper-line: rgba(39, 66, 87, 0.14);
+      --peach: #e7bca9;
+      --lilac: #cbc0e3;
+      --mint: #c9d9bf;
+      --rust: #b8553f;
+      --outline: rgba(19, 31, 23, 0.72);
+      --shadow: 9px 11px 0 rgba(17, 29, 21, 0.22), 0 18px 34px rgba(17, 29, 21, 0.16);
+      --sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --serif: "Songti SC", "STSong", "Noto Serif CJK SC", Georgia, serif;
+      --hand: "Kaiti SC", "STKaiti", "Songti SC", serif;
+      --mono: "SFMono-Regular", "Cascadia Code", "Roboto Mono", ui-monospace, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      min-width: 320px;
+      background: var(--board);
+      scroll-behavior: smooth;
+    }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      overflow-x: hidden;
+      color: var(--cream);
+      font-family: var(--sans);
+      background-color: var(--board);
+      background-image:
+        linear-gradient(var(--grid-major) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid-major) 1px, transparent 1px),
+        linear-gradient(var(--grid-fine) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid-fine) 1px, transparent 1px);
+      background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
+      transition: background-color 180ms ease;
+    }
+
+    body::before {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 15% 12%, rgba(255, 255, 255, 0.08), transparent 28%),
+        radial-gradient(circle at 82% 78%, rgba(6, 18, 10, 0.16), transparent 34%);
+      content: "";
+    }
+
+    body[data-theme="ink"] {
+      --board: #344957;
+      --board-deep: #263846;
+      --grid-fine: rgba(227, 238, 244, 0.1);
+      --grid-major: rgba(227, 238, 244, 0.16);
+    }
+
+    body[data-theme="cork"] {
+      --board: #755f49;
+      --board-deep: #554331;
+      --grid-fine: rgba(255, 244, 222, 0.08);
+      --grid-major: rgba(255, 244, 222, 0.14);
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+
+    button {
+      color: inherit;
+    }
+
+    button:focus-visible,
+    input:focus-visible,
+    select:focus-visible,
+    [contenteditable="true"]:focus-visible {
+      outline: 2px solid #fff4a8;
+      outline-offset: 3px;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      min-height: 58px;
+      padding: 0 clamp(18px, 2.8vw, 44px);
+      border-bottom: 1px solid rgba(245, 241, 229, 0.17);
+      background: color-mix(in srgb, var(--board-deep) 92%, transparent);
+      box-shadow: 0 5px 18px rgba(15, 26, 19, 0.12);
+      backdrop-filter: blur(14px);
+    }
+
+    .brand {
+      display: inline-flex;
+      gap: 10px;
+      align-items: center;
+      width: max-content;
+      color: #f8f3e8;
+      text-decoration: none;
+    }
+
+    .brand-mark {
+      width: 18px;
+      height: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.7);
+      background:
+        linear-gradient(90deg, transparent 47%, rgba(255,255,255,.52) 48% 52%, transparent 53%),
+        linear-gradient(transparent 47%, rgba(255,255,255,.52) 48% 52%, transparent 53%);
+      transform: rotate(4deg);
+    }
+
+    .brand strong {
+      font-size: 15px;
+      font-weight: 680;
+      letter-spacing: -0.02em;
+    }
+
+    .brand small {
+      padding-left: 10px;
+      border-left: 1px solid rgba(255,255,255,.2);
+      color: rgba(248,243,232,.58);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .today {
+      justify-self: center;
+      color: rgba(248,243,232,.76);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.07em;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      justify-self: end;
+    }
+
+    .global-search {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .global-search svg {
+      position: absolute;
+      left: 10px;
+      width: 14px;
+      pointer-events: none;
+    }
+
+    .global-search input {
+      width: clamp(140px, 16vw, 220px);
+      height: 34px;
+      padding: 0 12px 0 32px;
+      border: 1px solid rgba(248,243,232,.2);
+      border-radius: 1px;
+      background: rgba(255,255,255,.06);
+      color: #fff;
+      font-size: 12px;
+    }
+
+    .global-search input::placeholder {
+      color: rgba(255,255,255,.48);
+    }
+
+    .saved-state {
+      display: none;
+      gap: 7px;
+      align-items: center;
+      min-width: 67px;
+      color: rgba(248,243,232,.66);
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+
+    .saved-state::before {
+      width: 7px;
+      height: 7px;
+      border: 1px solid rgba(255,255,255,.5);
+      background: #c7df9b;
+      content: "";
+      transition: background 150ms ease;
+    }
+
+    .saved-state.is-saving::before {
+      background: #e5ba72;
+    }
+
+    .saved-state.is-error::before {
+      background: #d96a55;
+    }
+
+    .icon-button {
+      display: grid;
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      border: 1px solid rgba(248,243,232,.2);
+      border-radius: 1px;
+      background: rgba(255,255,255,.06);
+      cursor: pointer;
+      place-items: center;
+      font-family: var(--mono);
+      font-size: 15px;
+      transition: background 130ms ease, transform 130ms ease;
+    }
+
+    .icon-button:hover {
+      background: rgba(255,255,255,.13);
+    }
+
+    .icon-button:active {
+      transform: translateY(1px);
+    }
+
+    .mobile-jump {
+      display: none;
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(620px, 1.72fr) minmax(340px, .92fr);
+      gap: clamp(20px, 2vw, 30px);
+      width: min(1500px, 100%);
+      min-height: calc(100vh - 58px);
+      margin: 0 auto;
+      padding: clamp(22px, 2.7vw, 42px) clamp(18px, 2.8vw, 44px) clamp(26px, 3vw, 46px);
+    }
+
+    .study-module,
+    .collections-module {
+      min-height: 670px;
+      max-height: 790px;
+      scroll-margin-top: 72px;
+    }
+
+    .study-module {
+      position: relative;
+      isolation: isolate;
+      display: grid;
+      grid-template-columns: clamp(205px, 22vw, 275px) minmax(0, 1fr);
+      overflow: hidden;
+      border: 1px solid var(--outline);
+      border-radius: 1px;
+      background: var(--paper);
+      box-shadow: var(--shadow);
+      color: var(--ink);
+    }
+
+    .study-module::before {
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      background:
+        repeating-linear-gradient(0deg, rgba(54,44,24,.018) 0 1px, transparent 1px 4px),
+        radial-gradient(circle, rgba(42,36,24,.045) .5px, transparent .7px);
+      background-size: auto, 7px 7px;
+      content: "";
+      opacity: .55;
+    }
+
+    .paper-tape {
+      position: absolute;
+      top: -9px;
+      left: 68%;
+      z-index: 4;
+      width: 108px;
+      height: 25px;
+      border-right: 1px solid rgba(91,77,53,.12);
+      border-left: 1px solid rgba(91,77,53,.12);
+      background:
+        repeating-linear-gradient(90deg, rgba(255,255,255,.06) 0 2px, rgba(120,96,62,.03) 2px 3px),
+        rgba(234,220,188,.76);
+      box-shadow: 0 2px 5px rgba(39,32,23,.1);
+      transform: translateX(-50%) rotate(.8deg);
+    }
+
+    .note-rail {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      padding: 29px 21px 22px;
+      border-right: 1px solid rgba(24,37,29,.34);
+      background:
+        radial-gradient(circle at 30% 5%, rgba(255,255,255,.35), transparent 30%),
+        var(--paper-warm);
+    }
+
+    .module-kicker {
+      display: block;
+      margin-bottom: 7px;
+      color: rgba(24,37,29,.58);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    .rail-title-row,
+    .collection-title-row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .rail-title-row h1,
+    .collection-title-row h2 {
+      margin: 0;
+      font-family: var(--hand);
+      font-size: clamp(24px, 2.4vw, 32px);
+      font-weight: 700;
+      letter-spacing: .02em;
+      line-height: 1.1;
+    }
+
+    .note-count,
+    .collection-count {
+      color: rgba(24,37,29,.55);
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+
+    .new-text-button,
+    .add-resource-button {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      min-height: 42px;
+      margin: 25px 0 17px;
+      border: 1px solid rgba(24,37,29,.64);
+      border-radius: 1px;
+      background: rgba(255,255,255,.3);
+      color: var(--ink);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 680;
+      letter-spacing: .03em;
+      box-shadow: 3px 3px 0 rgba(24,37,29,.16);
+      transition: transform 130ms ease, box-shadow 130ms ease, background 130ms ease;
+    }
+
+    .new-text-button:hover,
+    .add-resource-button:hover {
+      background: rgba(255,255,255,.5);
+      box-shadow: 5px 5px 0 rgba(24,37,29,.14);
+      transform: translate(-1px, -1px);
+    }
+
+    .new-text-button:active,
+    .add-resource-button:active {
+      box-shadow: 1px 1px 0 rgba(24,37,29,.18);
+      transform: translate(2px, 2px);
+    }
+
+    .note-list {
+      display: grid;
+      gap: 0;
+      min-height: 0;
+      margin: 0;
+      padding: 0;
+      overflow-y: auto;
+      list-style: none;
+      scrollbar-width: thin;
+    }
+
+    .note-list li {
+      position: relative;
+      border-bottom: 1px solid rgba(24,37,29,.2);
+    }
+
+    .note-list-item {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      width: 100%;
+      min-height: 74px;
+      padding: 13px 4px 12px;
+      border: 0;
+      background: transparent;
+      color: var(--ink);
+      cursor: pointer;
+      text-align: left;
+      transition: padding 140ms ease, background 140ms ease;
+    }
+
+    .note-list-item:hover {
+      background: rgba(255,255,255,.18);
+    }
+
+    .note-list-item[aria-current="page"] {
+      padding-right: 9px;
+      padding-left: 10px;
+      background: rgba(255,255,255,.38);
+    }
+
+    .note-list-item[aria-current="page"]::before {
+      position: absolute;
+      top: 12px;
+      bottom: 12px;
+      left: 0;
+      width: 3px;
+      background: var(--rust);
+      content: "";
+    }
+
+    .note-list-main {
+      min-width: 0;
+    }
+
+    .note-list-main strong {
+      display: block;
+      overflow: hidden;
+      font-family: var(--serif);
+      font-size: 14px;
+      font-weight: 650;
+      line-height: 1.35;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .note-list-main small {
+      display: block;
+      margin-top: 7px;
+      color: rgba(24,37,29,.55);
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+
+    .note-language {
+      align-self: start;
+      padding: 3px 4px;
+      border: 1px solid rgba(24,37,29,.32);
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+
+    .delete-note {
+      position: absolute;
+      right: 2px;
+      bottom: 6px;
+      z-index: 3;
+      width: 24px;
+      height: 24px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: rgba(24,37,29,.48);
+      cursor: pointer;
+      font-size: 15px;
+      opacity: 0;
+      transition: opacity 120ms ease;
+    }
+
+    .note-list li:hover .delete-note,
+    .delete-note:focus-visible {
+      opacity: 1;
+    }
+
+    .rail-footer {
+      margin-top: auto;
+      padding-top: 18px;
+      color: rgba(24,37,29,.56);
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.55;
+    }
+
+    .editor-sheet {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      padding: 31px clamp(25px, 3vw, 44px) 24px;
+      background:
+        linear-gradient(90deg, transparent 0 30px, rgba(190,79,67,.15) 30px 31px, transparent 31px),
+        repeating-linear-gradient(0deg, transparent 0 35px, var(--paper-line) 35px 36px),
+        rgba(247,244,235,.96);
+      box-shadow: inset 13px 0 18px rgba(70,55,33,.045);
+    }
+
+    .editor-meta {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      min-height: 33px;
+      margin-bottom: 19px;
+    }
+
+    .editor-meta select,
+    .editor-meta input {
+      height: 31px;
+      padding: 0 8px;
+      border: 1px solid rgba(24,37,29,.28);
+      border-radius: 1px;
+      background: rgba(255,255,255,.32);
+      color: var(--ink);
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+
+    .editor-meta input {
+      width: 132px;
+    }
+
+    #noteDate {
+      width: 150px;
+      min-width: 150px;
+    }
+
+    .edit-mode {
+      margin-left: auto;
+      color: rgba(24,37,29,.55);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+
+    .title-input {
+      width: 100%;
+      margin: 0 0 14px;
+      padding: 0 0 14px;
+      border: 0;
+      border-bottom: 1px solid rgba(24,37,29,.45);
+      border-radius: 0;
+      background: transparent;
+      color: var(--ink);
+      font-family: var(--serif);
+      font-size: clamp(27px, 3vw, 40px);
+      font-weight: 680;
+      letter-spacing: -.02em;
+      line-height: 1.2;
+    }
+
+    .title-input::placeholder {
+      color: rgba(24,37,29,.32);
+    }
+
+    .title-input:focus {
+      outline: 0;
+      border-bottom-color: rgba(24,37,29,.75);
+    }
+
+    .editor-toolbar {
+      display: flex;
+      gap: 3px;
+      align-items: center;
+      margin-bottom: 13px;
+    }
+
+    .format-button {
+      display: grid;
+      width: 31px;
+      height: 31px;
+      padding: 0;
+      border: 1px solid transparent;
+      border-radius: 1px;
+      background: transparent;
+      color: rgba(24,37,29,.68);
+      cursor: pointer;
+      place-items: center;
+      font-family: var(--serif);
+      font-size: 13px;
+    }
+
+    .format-button:hover {
+      border-color: rgba(24,37,29,.22);
+      background: rgba(255,255,255,.45);
+      color: var(--ink);
+    }
+
+    .toolbar-rule {
+      width: 1px;
+      height: 18px;
+      margin: 0 4px;
+      background: rgba(24,37,29,.2);
+    }
+
+    .editor-area {
+      flex: 1;
+      min-height: 310px;
+      padding: 3px 4px 30px;
+      overflow-y: auto;
+      color: #243129;
+      font-family: var(--serif);
+      font-size: clamp(16px, 1.45vw, 19px);
+      line-height: 1.9;
+      caret-color: var(--rust);
+      scrollbar-width: thin;
+    }
+
+    .editor-area:focus {
+      outline: 0;
+    }
+
+    .editor-area:empty::before {
+      color: rgba(24,37,29,.34);
+      content: "开始写下今天的学习文本…";
+      pointer-events: none;
+    }
+
+    .editor-area p {
+      margin: 0 0 1em;
+    }
+
+    .editor-area blockquote {
+      margin: 1.4em 0;
+      padding-left: 18px;
+      border-left: 3px solid var(--rust);
+      color: rgba(24,37,29,.7);
+    }
+
+    .editor-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 30px;
+      padding-top: 13px;
+      border-top: 1px solid rgba(24,37,29,.25);
+      color: rgba(24,37,29,.52);
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+
+    .editor-foot strong {
+      color: rgba(24,37,29,.74);
+      font-weight: 500;
+    }
+
+    .collections-module {
+      position: relative;
+      isolation: isolate;
+      padding: 12px 16px 16px 32px;
+      filter: drop-shadow(9px 12px 8px rgba(15, 27, 19, .24));
+      color: var(--ink);
+    }
+
+    .notebook-cover {
+      position: relative;
+      height: 100%;
+      min-height: 646px;
+      padding: 12px 12px 12px 40px;
+      border: 1px solid #20291f;
+      border-radius: 6px 10px 10px 6px;
+      background:
+        repeating-linear-gradient(90deg, rgba(255,255,255,.025) 0 1px, transparent 1px 3px),
+        #41493e;
+      box-shadow: inset 0 0 0 2px rgba(255,255,255,.05), inset -9px 0 17px rgba(0,0,0,.16);
+    }
+
+    .notebook-cover::before {
+      position: absolute;
+      top: 10px;
+      bottom: 10px;
+      left: 21px;
+      width: 8px;
+      border-right: 1px solid rgba(255,255,255,.11);
+      border-left: 1px solid rgba(0,0,0,.26);
+      background: rgba(20,27,21,.2);
+      content: "";
+    }
+
+    .notebook-page {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      height: 100%;
+      min-height: 620px;
+      flex-direction: column;
+      overflow: hidden;
+      padding: 31px clamp(23px, 2.2vw, 34px) 22px;
+      border: 1px solid rgba(51,43,32,.65);
+      border-radius: 2px 11px 11px 2px;
+      background:
+        linear-gradient(90deg, transparent 0 25px, rgba(190,79,67,.22) 25px 26px, transparent 26px),
+        repeating-linear-gradient(0deg, transparent 0 37px, rgba(48,80,105,.16) 37px 38px),
+        #f3efe4;
+      box-shadow: 3px 0 0 #d8d0c1, 6px 0 0 #b8b0a4, inset 11px 0 18px rgba(70,53,36,.08);
+    }
+
+    .collection-title-row {
+      padding-left: 8px;
+    }
+
+    .collection-title-row h2 {
+      font-size: clamp(27px, 2.7vw, 36px);
+    }
+
+    .add-resource-button {
+      width: auto;
+      min-width: 92px;
+      min-height: 36px;
+      margin: 0;
+      padding: 0 11px;
+      background: var(--paper-warm);
+      box-shadow: 3px 3px 0 rgba(24,37,29,.13);
+    }
+
+    .add-resource-button:hover {
+      box-shadow: 3px 3px 0 rgba(24,37,29,.12);
+    }
+
+    .collection-summary {
+      margin: 15px 0 13px;
+      padding: 0 8px 12px;
+      border-bottom: 1px solid rgba(24,37,29,.25);
+      color: rgba(24,37,29,.52);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: .04em;
+    }
+
+    .collection-list {
+      display: grid;
+      gap: 0;
+      min-height: 0;
+      margin: 0;
+      padding: 0 0 0 8px;
+      overflow-y: auto;
+      list-style: none;
+      scrollbar-width: thin;
+    }
+
+    .collection-item {
+      position: relative;
+      display: grid;
+      grid-template-columns: 25px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      min-height: 67px;
+      padding: 9px 3px 9px 0;
+      border-bottom: 1px solid rgba(48,80,105,.17);
+    }
+
+    .collection-symbol {
+      color: rgba(24,37,29,.48);
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    .collection-copy {
+      min-width: 0;
+    }
+
+    .collection-name {
+      display: block;
+      overflow: hidden;
+      color: var(--ink);
+      font-family: var(--serif);
+      font-size: 14px;
+      font-weight: 620;
+      line-height: 1.4;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .collection-name:focus {
+      overflow: visible;
+      background: rgba(238,227,156,.5);
+      outline: 1px dashed rgba(24,37,29,.42);
+      outline-offset: 3px;
+      text-overflow: clip;
+      white-space: normal;
+    }
+
+    .collection-detail {
+      display: block;
+      margin-top: 4px;
+      overflow: hidden;
+      color: rgba(24,37,29,.5);
+      font-size: 11px;
+      line-height: 1.4;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .collection-kind {
+      padding: 3px 0;
+      color: rgba(24,37,29,.62);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+
+    .delete-resource {
+      position: absolute;
+      top: 2px;
+      right: 0;
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      border: 0;
+      background: #f3efe4;
+      color: rgba(24,37,29,.48);
+      cursor: pointer;
+      font-size: 14px;
+      opacity: 0;
+      transition: opacity 120ms ease;
+    }
+
+    .collection-item:hover .delete-resource,
+    .delete-resource:focus-visible {
+      opacity: 1;
+    }
+
+    .collection-empty {
+      display: grid;
+      flex: 1;
+      color: rgba(24,37,29,.46);
+      font-family: var(--hand);
+      font-size: 16px;
+      place-items: center;
+    }
+
+    .collection-empty[hidden] {
+      display: none;
+    }
+
+    .book-tabs {
+      position: absolute;
+      top: 73px;
+      right: -16px;
+      z-index: 1;
+      display: grid;
+      gap: 7px;
+    }
+
+    .book-tab {
+      width: 49px;
+      min-height: 43px;
+      padding: 0 4px 0 13px;
+      border: 1px solid rgba(24,31,25,.65);
+      border-left: 0;
+      border-radius: 0 4px 4px 0;
+      background: #e7cf87;
+      color: #28372d;
+      cursor: pointer;
+      font-size: 11px;
+      text-align: center;
+      transition: transform 130ms ease;
+    }
+
+    .book-tab:nth-child(2) {
+      background: var(--lilac);
+    }
+
+    .book-tab:nth-child(3) {
+      background: var(--peach);
+    }
+
+    .book-tab:nth-child(4) {
+      background: var(--mint);
+    }
+
+    .book-tab:hover,
+    .book-tab[aria-pressed="true"] {
+      transform: translateX(6px);
+    }
+
+    .bookmark-ribbon {
+      position: absolute;
+      bottom: -18px;
+      left: 55%;
+      z-index: 4;
+      width: 16px;
+      height: 52px;
+      background: var(--rust);
+      clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 76%, 0 100%);
+      filter: drop-shadow(1px 2px 1px rgba(0,0,0,.2));
+    }
+
+    .toast {
+      position: fixed;
+      right: 26px;
+      bottom: 24px;
+      z-index: 100;
+      padding: 10px 13px;
+      border: 1px solid rgba(255,255,255,.24);
+      background: var(--board-deep);
+      box-shadow: 5px 6px 0 rgba(18,29,22,.24);
+      color: #f8f2e7;
+      font-size: 12px;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(8px);
+      transition: opacity 150ms ease, transform 150ms ease;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    @media (max-width: 1120px) {
+      .workspace {
+        grid-template-columns: minmax(560px, 1.55fr) minmax(310px, .85fr);
+      }
+
+      .study-module {
+        grid-template-columns: 205px minmax(0, 1fr);
+      }
+
+      .saved-state {
+        display: none;
+      }
+    }
+
+    @media (max-width: 920px) {
+      .topbar {
+        grid-template-columns: 1fr auto;
+      }
+
+      .today {
+        display: none;
+      }
+
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+
+      .study-module,
+      .collections-module {
+        min-height: 680px;
+        max-height: none;
+      }
+
+      .collections-module {
+        min-height: 640px;
+      }
+    }
+
+    @media (max-width: 650px) {
+      .topbar {
+        padding: 10px 14px;
+      }
+
+      .brand small,
+      .global-search {
+        display: none;
+      }
+
+      #themeButton {
+        display: none;
+      }
+
+      .mobile-jump {
+        display: flex;
+        gap: 5px;
+        align-items: center;
+      }
+
+      .mobile-jump a {
+        display: grid;
+        min-width: 58px;
+        min-height: 44px;
+        padding: 0 9px;
+        border: 1px solid rgba(248,243,232,.27);
+        border-radius: 1px;
+        background: rgba(255,255,255,.07);
+        color: #f8f3e8;
+        font-size: 13px;
+        font-weight: 650;
+        text-decoration: none;
+        place-items: center;
+      }
+
+      .workspace {
+        gap: 25px;
+        padding: 15px 12px 34px;
+      }
+
+      .study-module {
+        display: flex;
+        min-height: 820px;
+        flex-direction: column;
+      }
+
+      .note-rail {
+        min-height: 235px;
+        padding: 23px 18px 14px;
+        border-right: 0;
+        border-bottom: 1px solid rgba(24,37,29,.34);
+      }
+
+      .new-text-button {
+        margin: 16px 0 10px;
+      }
+
+      .note-list {
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        overflow-y: hidden;
+      }
+
+      .note-list li {
+        min-width: 205px;
+        border-right: 1px solid rgba(24,37,29,.2);
+        border-bottom: 0;
+      }
+
+      .note-list-main strong {
+        display: -webkit-box;
+        overflow: hidden;
+        line-height: 1.4;
+        text-overflow: clip;
+        white-space: normal;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+      }
+
+      .note-list-item {
+        min-height: 70px;
+      }
+
+      .rail-footer {
+        display: none;
+      }
+
+      .editor-sheet {
+        min-height: 570px;
+        padding: 24px 18px 18px;
+      }
+
+      .editor-area {
+        min-height: 315px;
+        font-size: 17px;
+      }
+
+      .editor-meta input,
+      .editor-meta select {
+        font-size: 16px;
+      }
+
+      #noteDate {
+        width: 156px;
+        min-width: 156px;
+      }
+
+      .edit-mode {
+        display: none;
+      }
+
+      .collections-module {
+        min-height: 620px;
+        padding: 9px 9px 20px 14px;
+      }
+
+      .notebook-cover {
+        min-height: 590px;
+        padding: 9px 9px 9px 31px;
+      }
+
+      .notebook-cover::before {
+        left: 15px;
+      }
+
+      .notebook-page {
+        min-height: 570px;
+        padding: 25px 20px 18px;
+      }
+
+      .collection-title-row {
+        align-items: flex-start;
+      }
+
+      .add-resource-button {
+        min-width: 76px;
+        min-height: 44px;
+      }
+
+      .book-tabs {
+        right: -9px;
+      }
+
+      .book-tab {
+        width: 45px;
+        min-height: 44px;
+        padding-left: 10px;
+      }
+    }
+
+    /* Tabbed blueprint workspace */
+    body::before {
+      background:
+        linear-gradient(90deg, transparent 12%, rgba(255,255,255,.06) 12% calc(12% + 1px), transparent calc(12% + 1px)),
+        linear-gradient(transparent 76%, rgba(255,255,255,.06) 76% calc(76% + 1px), transparent calc(76% + 1px)),
+        radial-gradient(circle at 16% 14%, rgba(255,255,255,.07), transparent 28%),
+        radial-gradient(circle at 84% 80%, rgba(5,23,31,.18), transparent 34%);
+    }
+
+    .workspace {
+      position: relative;
+      display: block;
+      width: min(1500px, 100%);
+      min-height: calc(100vh - 58px);
+      padding: clamp(24px, 2.6vw, 38px) clamp(18px, 3vw, 48px) clamp(30px, 3vw, 48px);
+    }
+
+    .workspace::before {
+      position: absolute;
+      top: 17px;
+      right: clamp(42px, 5vw, 82px);
+      left: clamp(42px, 5vw, 82px);
+      height: 8px;
+      border-top: 1px solid rgba(255,255,255,.22);
+      color: rgba(255,255,255,.48);
+      content: "WORK AREA / 1320";
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: .09em;
+      text-align: center;
+    }
+
+    .workspace::after {
+      position: absolute;
+      top: 96px;
+      right: 17px;
+      bottom: 48px;
+      width: 14px;
+      border-right: 1px solid rgba(255,255,255,.22);
+      color: rgba(255,255,255,.44);
+      content: "VIEW 900";
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: .08em;
+      writing-mode: vertical-rl;
+    }
+
+    .primary-tabs {
+      position: relative;
+      z-index: 10;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      width: min(560px, 100%);
+      margin: 0 0 20px;
+      border-bottom: 1px solid rgba(255,255,255,.3);
+    }
+
+    .primary-tabs::after {
+      position: absolute;
+      bottom: -1px;
+      left: 0;
+      width: 50%;
+      height: 3px;
+      background: #f0e59d;
+      content: "";
+      transform: translateX(0);
+      transition: transform .25s ease;
+    }
+
+    .primary-tabs[data-active="collections"]::after {
+      transform: translateX(100%);
+    }
+
+    .primary-tab {
+      min-height: 49px;
+      padding: 0 16px;
+      border: 0;
+      background: transparent;
+      color: rgba(248,243,232,.62);
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 650;
+      letter-spacing: .02em;
+      transition: color .18s ease, background .18s ease;
+    }
+
+    .primary-tab:hover {
+      background: rgba(255,255,255,.06);
+      color: #fff;
+    }
+
+    .primary-tab[aria-selected="true"] {
+      color: #fff;
+    }
+
+    .primary-tab small {
+      margin-left: 8px;
+      color: rgba(255,255,255,.45);
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    .tab-stage {
+      position: relative;
+      min-height: 710px;
+    }
+
+    .tab-panel {
+      width: 100%;
+      min-height: 710px;
+      max-height: none;
+      opacity: 0;
+      transform: translateY(6px);
+      transition: opacity .2s ease, transform .2s ease;
+    }
+
+    .tab-panel.is-active {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .tab-panel.is-leaving {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+
+    .tab-panel[hidden] {
+      display: none;
+    }
+
+    .study-module {
+      grid-template-columns: clamp(230px, 22vw, 310px) minmax(0, 1fr);
+      min-height: 710px;
+      max-height: calc(100vh - 152px);
+    }
+
+    .collections-module {
+      min-height: 710px;
+      max-height: none;
+      padding: 4px 42px 18px;
+      filter: drop-shadow(10px 14px 9px rgba(12, 29, 38, .26));
+    }
+
+    .collections-module .notebook-cover {
+      width: min(1080px, 94%);
+      min-height: 696px;
+      margin: 0 auto;
+    }
+
+    .collections-module .notebook-page {
+      min-height: 670px;
+      padding: 31px clamp(28px, 4vw, 58px) 25px;
+    }
+
+    .collections-module .collection-title-row h2 {
+      font-size: clamp(31px, 3vw, 43px);
+    }
+
+    .filter-chips {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin: 1px 0 16px;
+      padding: 0 8px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    .filter-chips::-webkit-scrollbar {
+      display: none;
+    }
+
+    .filter-chip {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+      justify-content: center;
+      min-height: 36px;
+      padding: 0 13px;
+      border: 0;
+      border-radius: 999px;
+      background: rgba(255,255,255,.34);
+      color: rgba(24,37,29,.7);
+      cursor: pointer;
+      flex-shrink: 0;
+      font-size: 12px;
+      font-weight: 650;
+      transition: color .15s ease, background .15s ease, border-color .15s ease, transform .15s ease;
+    }
+
+    .filter-chip::before {
+      display: grid;
+      width: 0;
+      overflow: hidden;
+      color: #fff;
+      content: "✓";
+      font-family: var(--mono);
+      font-size: 11px;
+      opacity: 0;
+      place-items: center;
+      transition: width .15s ease, opacity .15s ease;
+    }
+
+    .filter-chip:hover {
+      background: rgba(47,102,149,.12);
+      transform: translateY(-1px);
+    }
+
+    .filter-chip[aria-pressed="true"] {
+      background: var(--blue-action);
+      color: #fff;
+    }
+
+    .filter-chip[aria-pressed="true"]::before {
+      width: 13px;
+      opacity: 1;
+    }
+
+    .collections-module .collection-list {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      column-gap: clamp(30px, 4vw, 58px);
+      align-content: start;
+      flex: 1;
+      padding-right: 8px;
+    }
+
+    .collections-module .collection-item {
+      min-height: 77px;
+    }
+
+    .reveal {
+      opacity: 0;
+      transform: translateY(30px);
+      transition: opacity .6s ease var(--reveal-delay, 0ms), transform .6s ease var(--reveal-delay, 0ms);
+    }
+
+    .reveal.is-visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: grid;
+      padding: 20px;
+      background: rgba(11, 24, 31, .4);
+      opacity: 0;
+      pointer-events: none;
+      place-items: center;
+      transition: opacity .3s ease;
+    }
+
+    .modal-backdrop[hidden] {
+      display: none;
+    }
+
+    .modal-backdrop.is-open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal-dialog {
+      width: min(500px, 100%);
+      padding: 28px;
+      border: 1px solid rgba(20,32,25,.72);
+      border-radius: 2px;
+      background:
+        repeating-linear-gradient(0deg, transparent 0 34px, rgba(48,80,105,.12) 34px 35px),
+        #f4efe4;
+      box-shadow: 10px 13px 0 rgba(12,25,32,.25), 0 24px 60px rgba(8,20,27,.32);
+      color: var(--ink);
+      opacity: 0;
+      transform: scale(.97) translateY(8px);
+      transition: opacity .3s ease, transform .3s ease;
+    }
+
+    .modal-backdrop.is-open .modal-dialog {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+
+    .modal-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+
+    .modal-head h2 {
+      margin: 4px 0 0;
+      font-family: var(--hand);
+      font-size: 29px;
+      line-height: 1.2;
+    }
+
+    .modal-close {
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      border: 1px solid rgba(24,37,29,.26);
+      border-radius: 1px;
+      background: transparent;
+      color: var(--ink);
+      cursor: pointer;
+      font-size: 18px;
+    }
+
+    .resource-form {
+      display: grid;
+      gap: 17px;
+    }
+
+    .field-label {
+      display: grid;
+      gap: 7px;
+      color: rgba(24,37,29,.65);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+
+    .field-input,
+    .dropdown-trigger {
+      width: 100%;
+      min-height: 43px;
+      padding: 0 12px;
+      border: 1px solid rgba(24,37,29,.38);
+      border-radius: 1px;
+      background: rgba(255,255,255,.52);
+      color: var(--ink);
+      font-family: var(--sans);
+      font-size: 15px;
+      text-align: left;
+    }
+
+    .custom-dropdown {
+      position: relative;
+    }
+
+    .dropdown-trigger {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+    }
+
+    .dropdown-trigger::after {
+      content: "⌄";
+      font-family: var(--mono);
+      transition: transform .25s ease;
+    }
+
+    .custom-dropdown.is-open .dropdown-trigger::after {
+      transform: rotate(180deg);
+    }
+
+    .dropdown-menu {
+      position: absolute;
+      top: calc(100% + 5px);
+      right: 0;
+      left: 0;
+      z-index: 5;
+      display: grid;
+      max-height: 0;
+      overflow: hidden;
+      border: 1px solid transparent;
+      background: #f8f4ea;
+      box-shadow: 5px 7px 0 rgba(21,33,26,.14);
+      opacity: 0;
+      transform: translateY(-5px);
+      transition: max-height .25s ease, opacity .25s ease, transform .25s ease, border-color .25s ease;
+    }
+
+    .custom-dropdown.is-open .dropdown-menu {
+      max-height: 180px;
+      border-color: rgba(24,37,29,.38);
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .dropdown-option {
+      min-height: 42px;
+      padding: 0 12px;
+      border: 0;
+      border-bottom: 1px solid rgba(24,37,29,.12);
+      background: transparent;
+      color: var(--ink);
+      cursor: pointer;
+      font-size: 14px;
+      text-align: left;
+    }
+
+    .dropdown-option:last-child {
+      border-bottom: 0;
+    }
+
+    .dropdown-option:hover,
+    .dropdown-option[aria-selected="true"] {
+      background: rgba(47,102,149,.12);
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      padding-top: 7px;
+    }
+
+    .modal-button {
+      min-height: 42px;
+      padding: 0 16px;
+      border: 1px solid rgba(24,37,29,.42);
+      border-radius: 1px;
+      background: transparent;
+      color: var(--ink);
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .modal-button.primary {
+      border-color: var(--blue-action);
+      background: var(--blue-action);
+      color: #fff;
+      box-shadow: 3px 3px 0 rgba(24,37,29,.14);
+    }
+
+    @media (max-width: 920px) {
+      .workspace::before,
+      .workspace::after {
+        display: none;
+      }
+
+      .primary-tabs {
+        width: 100%;
+      }
+
+      .study-module {
+        max-height: none;
+      }
+
+      .collections-module {
+        padding: 4px 12px 22px;
+      }
+
+      .collections-module .notebook-cover {
+        width: 100%;
+      }
+    }
+
+    @media (max-width: 650px) {
+      .workspace {
+        padding: 14px 12px 30px;
+      }
+
+      .primary-tabs {
+        position: sticky;
+        top: 58px;
+        z-index: 40;
+        margin-bottom: 14px;
+        background: color-mix(in srgb, var(--board-deep) 95%, transparent);
+        backdrop-filter: blur(12px);
+      }
+
+      .primary-tab {
+        min-height: 48px;
+        padding: 0 8px;
+        font-size: 14px;
+      }
+
+      .primary-tab small {
+        display: none;
+      }
+
+      .tab-stage,
+      .tab-panel {
+        min-height: 660px;
+      }
+
+      .collections-module {
+        min-height: 650px;
+        padding: 0 2px 22px;
+      }
+
+      .collections-module .notebook-cover {
+        min-height: 620px;
+      }
+
+      .collections-module .notebook-page {
+        min-height: 596px;
+        padding: 25px 20px 20px;
+      }
+
+      .collections-module .collection-title-row h2 {
+        font-size: 29px;
+      }
+
+      .collections-module .collection-list {
+        grid-template-columns: 1fr;
+        column-gap: 0;
+      }
+
+      .filter-chips {
+        margin-right: -10px;
+        margin-left: -2px;
+        padding-right: 12px;
+        padding-left: 2px;
+      }
+
+      .modal-dialog {
+        padding: 23px 19px;
+      }
+
+      .field-input,
+      .dropdown-trigger {
+        font-size: 16px;
+      }
+    }
+
+    /* Tactile desk revision */
+    body {
+      transition: background-color .48s cubic-bezier(.2,.8,.2,1), color .28s ease;
+    }
+
+    body[data-workspace="notes"] {
+      --board: #315f4a;
+      --board-deep: #234735;
+      --grid-fine: rgba(235, 244, 226, .11);
+      --grid-major: rgba(235, 244, 226, .2);
+    }
+
+    body[data-workspace="collections"] {
+      --board: #3f505b;
+      --board-deep: #293741;
+      --grid-fine: rgba(231, 238, 241, .1);
+      --grid-major: rgba(231, 238, 241, .18);
+    }
+
+    body::before {
+      transition: background .48s ease;
+    }
+
+    .topbar {
+      min-height: 64px;
+      padding: 0 clamp(20px, 3vw, 48px);
+      border-bottom-color: rgba(247, 243, 229, .16);
+      background: color-mix(in srgb, var(--board-deep) 91%, transparent);
+      box-shadow: 0 8px 26px rgba(18, 29, 24, .09);
+      transition: background-color .48s cubic-bezier(.2,.8,.2,1);
+    }
+
+    .brand {
+      gap: 11px;
+    }
+
+    .brand-mark {
+      width: 20px;
+      height: 20px;
+      transform: rotate(5deg);
+    }
+
+    .brand strong {
+      font-size: 17px;
+      letter-spacing: -.035em;
+    }
+
+    .brand small {
+      color: rgba(248,243,232,.56);
+      font-size: 12px;
+      letter-spacing: .04em;
+      text-transform: none;
+    }
+
+    .primary-tabs {
+      justify-self: center;
+      width: auto;
+      min-width: 260px;
+      margin: 0;
+      padding: 3px;
+      border: 1px solid rgba(255,255,255,.17);
+      border-radius: 9px;
+      background: rgba(255,255,255,.055);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.06);
+    }
+
+    .primary-tabs::after {
+      bottom: 3px;
+      left: 3px;
+      width: calc(50% - 3px);
+      height: calc(100% - 6px);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 6px;
+      background: rgba(255,255,255,.11);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
+      transform: translateX(0);
+      transition: transform .25s cubic-bezier(.2,.8,.2,1);
+    }
+
+    .primary-tabs[data-active="collections"]::after {
+      transform: translateX(100%);
+    }
+
+    .primary-tab {
+      position: relative;
+      z-index: 1;
+      min-width: 128px;
+      min-height: 34px;
+      padding: 0 14px;
+      border-radius: 6px;
+      color: rgba(248,243,232,.7);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .primary-tab:hover {
+      background: transparent;
+    }
+
+    .primary-tab small {
+      display: none;
+    }
+
+    .header-actions {
+      gap: 7px;
+    }
+
+    .global-search {
+      border: 1px solid rgba(248,243,232,.18);
+      border-radius: 999px;
+      background: rgba(255,255,255,.045);
+      transition: background 150ms ease, border-color 150ms ease;
+    }
+
+    .global-search:focus-within,
+    .global-search:hover {
+      border-color: rgba(248,243,232,.32);
+      background: rgba(255,255,255,.08);
+    }
+
+    .global-search svg {
+      left: 11px;
+      width: 13px;
+      color: rgba(255,255,255,.78);
+    }
+
+    .global-search input {
+      width: clamp(125px, 13vw, 180px);
+      height: 36px;
+      padding-right: 14px;
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+    }
+
+    .workspace {
+      width: 100%;
+      min-height: calc(100vh - 64px);
+      padding: clamp(22px, 3vw, 42px) clamp(22px, 4vw, 64px) clamp(32px, 4vw, 58px);
+    }
+
+    .workspace::before,
+    .workspace::after {
+      display: none;
+    }
+
+    .tab-stage,
+    .tab-panel {
+      min-height: calc(100vh - 128px);
+    }
+
+    .study-module {
+      width: min(1360px, 100%);
+      min-height: 690px;
+      max-height: calc(100vh - 128px);
+      margin: 0 auto;
+      border-color: rgba(27, 38, 30, .7);
+      border-radius: 2px 10px 10px 2px;
+      box-shadow: 10px 13px 0 rgba(17, 29, 21, .18), 0 22px 45px rgba(17, 29, 21, .14);
+    }
+
+    .collections-module {
+      min-height: calc(200dvh - 128px);
+      padding: 0;
+      filter: none;
+    }
+
+    .collection-parallax-scene {
+      position: relative;
+      height: calc(200dvh - 128px);
+      min-height: 980px;
+    }
+
+    .collection-parallax-sticky {
+      position: sticky;
+      top: 64px;
+      height: calc(100dvh - 64px);
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    [data-parallax-factor] {
+      will-change: transform;
+    }
+
+    .collection-parallax-back,
+    .collection-parallax-far {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      transform: translate3d(0, calc(0px - var(--parallax-y, 0px)), 0);
+    }
+
+    .collection-parallax-back::before {
+      position: absolute;
+      top: 15%;
+      left: 5%;
+      color: rgba(239,244,240,.055);
+      content: "COLLECTIONS";
+      font-family: var(--sans);
+      font-size: clamp(80px, 15vw, 240px);
+      font-weight: 720;
+      letter-spacing: -.075em;
+      line-height: .8;
+    }
+
+    .collection-parallax-back::after {
+      position: absolute;
+      right: 4%;
+      bottom: 14%;
+      width: min(42vw, 620px);
+      height: min(30vw, 390px);
+      border: 1px solid rgba(239,244,240,.1);
+      content: "";
+      transform: rotate(-5deg);
+    }
+
+    .collection-parallax-far::before,
+    .collection-parallax-far::after {
+      position: absolute;
+      border: 1px solid rgba(239,244,240,.13);
+      border-radius: 50%;
+      content: "";
+    }
+
+    .collection-parallax-far::before {
+      top: 22%;
+      right: 19%;
+      width: 170px;
+      height: 170px;
+    }
+
+    .collection-parallax-far::after {
+      bottom: 17%;
+      left: 13%;
+      width: 72px;
+      height: 72px;
+    }
+
+    .collection-desk-head {
+      position: relative;
+      z-index: 3;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 18px 28px;
+      align-items: end;
+      width: min(1500px, 100%);
+      margin: 0 auto clamp(25px, 3vw, 42px);
+      color: #f7f3e8;
+      transform: translate3d(0, calc(0px - var(--parallax-y, 0px)), 0);
+    }
+
+    .collection-heading-block {
+      display: flex;
+      gap: 17px;
+      align-items: baseline;
+    }
+
+    .collection-heading-block .module-kicker {
+      margin: 0;
+      color: rgba(247,243,232,.52);
+    }
+
+    .collection-title-row {
+      display: block;
+      padding: 0;
+    }
+
+    .collection-title-row h2,
+    .collections-module .collection-title-row h2 {
+      margin: 0;
+      color: #f8f4e9;
+      font-family: var(--sans);
+      font-size: clamp(22px, 2.2vw, 31px);
+      font-weight: 620;
+      letter-spacing: -.035em;
+    }
+
+    .collection-summary {
+      margin: 0;
+      padding: 0;
+      border: 0;
+      color: rgba(247,243,232,.5);
+      font-size: 10px;
+      white-space: nowrap;
+    }
+
+    .collection-head-actions {
+      display: flex;
+      gap: 9px;
+      align-items: center;
+      justify-content: flex-end;
+    }
+
+    .filter-chips {
+      gap: 4px;
+      margin: 0;
+      padding: 0;
+      border: 1px solid rgba(255,255,255,.16);
+      border-radius: 999px;
+      background: rgba(255,255,255,.045);
+    }
+
+    .filter-chip {
+      min-height: 34px;
+      padding: 0 12px;
+      border-radius: 999px;
+      background: transparent;
+      color: rgba(247,243,232,.66);
+      font-size: 11px;
+    }
+
+    .filter-chip:hover {
+      background: rgba(255,255,255,.07);
+      color: #fff;
+      transform: none;
+    }
+
+    .filter-chip[aria-pressed="true"] {
+      background: #e9e2b0;
+      color: #283a32;
+      box-shadow: 0 1px 0 rgba(255,255,255,.28);
+    }
+
+    .filter-chip::before {
+      color: currentColor;
+    }
+
+    .add-resource-button {
+      width: 36px;
+      min-width: 36px;
+      min-height: 36px;
+      margin: 0;
+      padding: 0;
+      border-color: rgba(255,255,255,.2);
+      border-radius: 50%;
+      background: rgba(255,255,255,.08);
+      box-shadow: none;
+      color: #f8f4e9;
+      font-size: 0;
+    }
+
+    .add-resource-button span {
+      font-size: 19px;
+      font-weight: 400;
+    }
+
+    .add-resource-button:hover {
+      border-color: rgba(255,255,255,.36);
+      background: rgba(255,255,255,.14);
+      box-shadow: none;
+      transform: translateY(-1px);
+    }
+
+    .collection-gallery {
+      position: relative;
+      z-index: 2;
+      width: calc(100% + clamp(22px, 4vw, 64px));
+      margin-right: calc(clamp(22px, 4vw, 64px) * -1);
+    }
+
+    .collections-module .collection-list {
+      display: flex;
+      gap: clamp(20px, 2.2vw, 34px);
+      align-items: flex-start;
+      min-height: clamp(470px, 63vh, 610px);
+      margin: 0;
+      padding: 8px clamp(22px, 4vw, 64px) 36px 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scroll-padding-inline: 0 clamp(22px, 4vw, 64px);
+      scroll-snap-type: x proximity;
+      scrollbar-color: rgba(255,255,255,.28) rgba(255,255,255,.06);
+      scrollbar-width: thin;
+    }
+
+    .collection-parallax-item {
+      flex: 0 0 clamp(245px, 22vw, 325px);
+      height: clamp(430px, 56vh, 560px);
+      list-style: none;
+      transform: translate3d(0, calc(0px - var(--parallax-y, 0px)), 0);
+      transform-origin: 50% 80%;
+    }
+
+    .collections-module .collection-item {
+      --artifact-bg: #f3f0e8;
+      --artifact-ink: #223029;
+      --artifact-edge: #d7d1c5;
+      --artifact-rotate: -.25deg;
+      position: relative;
+      display: flex;
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      flex-direction: column;
+      align-items: stretch;
+      padding: 52px 29px 30px;
+      overflow: visible;
+      border: 1px solid rgba(27,36,31,.54);
+      border-radius: 2px 2px 10px 4px;
+      background:
+        repeating-linear-gradient(0deg, transparent 0 35px, rgba(44,66,55,.09) 35px 36px),
+        var(--artifact-bg);
+      box-shadow:
+        3px 3px 0 var(--artifact-edge),
+        6px 6px 0 color-mix(in srgb, var(--artifact-edge) 82%, #776f64),
+        10px 16px 22px rgba(14,25,20,.22);
+      color: var(--artifact-ink);
+      scroll-snap-align: start;
+      transform: translateY(30px) rotate(var(--artifact-rotate));
+      transform-origin: 50% 80%;
+    }
+
+    .collections-module .collection-item.is-visible {
+      transform: translateY(0) rotate(var(--artifact-rotate));
+    }
+
+    .collections-module .collection-item.is-visible:hover {
+      transform: translateY(-8px) rotate(0deg);
+    }
+
+    .collections-module .collection-item[data-kind="video"] {
+      --artifact-bg: #eee591;
+      --artifact-edge: #c8bd68;
+      --artifact-rotate: .35deg;
+      border-radius: 1px;
+      background:
+        linear-gradient(135deg, transparent 0 26px, rgba(255,255,255,.42) 26px 27px, transparent 27px) top right / 48px 48px no-repeat,
+        repeating-linear-gradient(0deg, transparent 0 38px, rgba(54,68,38,.11) 38px 39px),
+        var(--artifact-bg);
+    }
+
+    .collections-module .collection-item[data-kind="tool"] {
+      --artifact-bg: #d5cbe8;
+      --artifact-edge: #998ab7;
+      --artifact-rotate: -.15deg;
+      padding-right: 32px;
+      border-width: 2px;
+      border-radius: 11px 15px 15px 9px;
+      background:
+        linear-gradient(90deg, rgba(82,64,116,.12), transparent 15%),
+        var(--artifact-bg);
+      box-shadow:
+        inset 8px 0 0 rgba(111,87,151,.11),
+        3px 3px 0 #b7a8d0,
+        7px 7px 0 #8f7bac,
+        11px 17px 23px rgba(14,25,20,.23);
+    }
+
+    .collection-parallax-item:nth-child(4n) .collection-item {
+      --artifact-bg: #efc1ae;
+      --artifact-edge: #bd8b78;
+      --artifact-rotate: .28deg;
+      border-radius: 3px 10px 10px 3px;
+      background:
+        repeating-linear-gradient(0deg, transparent 0 39px, rgba(87,50,42,.1) 39px 40px),
+        var(--artifact-bg);
+    }
+
+    .collections-module .collection-item::before {
+      position: absolute;
+      top: -10px;
+      left: 50%;
+      width: 94px;
+      height: 24px;
+      border-right: 1px solid rgba(104,86,52,.1);
+      border-left: 1px solid rgba(104,86,52,.1);
+      background:
+        repeating-linear-gradient(90deg, rgba(255,255,255,.08) 0 2px, rgba(120,96,62,.035) 2px 3px),
+        rgba(236,221,185,.88);
+      box-shadow: 0 2px 5px rgba(46,38,25,.1);
+      content: "";
+      transform: translateX(-50%) rotate(-.8deg);
+    }
+
+    .collections-module .collection-item[data-kind="video"]::before {
+      top: -19px;
+      left: 37px;
+      width: 18px;
+      height: 55px;
+      border: 3px solid rgba(53,66,56,.68);
+      border-bottom: 0;
+      border-radius: 10px 10px 0 0;
+      background: transparent;
+      box-shadow: none;
+      transform: rotate(4deg);
+    }
+
+    .collections-module .collection-item[data-kind="tool"]::before {
+      display: none;
+    }
+
+    .artifact-index {
+      display: block;
+      margin-bottom: 14px;
+      color: rgba(34,48,41,.46);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: .1em;
+    }
+
+    .collection-symbol {
+      display: none;
+    }
+
+    .collection-copy {
+      display: flex;
+      min-height: 0;
+      flex: 1;
+      flex-direction: column;
+    }
+
+    .collection-name {
+      display: block;
+      overflow: visible;
+      padding-bottom: 20px;
+      border-bottom: 1px solid rgba(34,48,41,.3);
+      color: var(--artifact-ink);
+      font-family: var(--serif);
+      font-size: clamp(22px, 2vw, 29px);
+      font-weight: 680;
+      letter-spacing: -.025em;
+      line-height: 1.25;
+      text-overflow: clip;
+      white-space: normal;
+    }
+
+    .collection-name:focus {
+      background: rgba(255,255,255,.26);
+      outline-offset: 5px;
+    }
+
+    .collection-detail {
+      display: block;
+      margin-top: 18px;
+      overflow: visible;
+      color: rgba(34,48,41,.62);
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.65;
+      text-overflow: clip;
+      white-space: normal;
+    }
+
+    .collection-kind {
+      align-self: flex-start;
+      margin-top: auto;
+      padding: 8px 0 0;
+      border-top: 1px solid rgba(34,48,41,.22);
+      color: rgba(34,48,41,.54);
+      font-size: 10px;
+      letter-spacing: .1em;
+    }
+
+    .delete-resource {
+      top: 15px;
+      right: 14px;
+      width: 28px;
+      height: 28px;
+      border: 1px solid rgba(34,48,41,.22);
+      border-radius: 50%;
+      background: rgba(255,255,255,.14);
+    }
+
+    .collection-empty {
+      min-height: 430px;
+      border: 1px dashed rgba(255,255,255,.24);
+      color: rgba(255,255,255,.56);
+    }
+
+    @media (max-width: 820px) {
+      .topbar {
+        grid-template-columns: auto 1fr auto;
+        gap: 12px;
+        padding: 0 14px;
+      }
+
+      .brand small,
+      .global-search input {
+        display: none;
+      }
+
+      .global-search {
+        width: 36px;
+        height: 36px;
+      }
+
+      .primary-tabs {
+        min-width: 220px;
+      }
+
+      .primary-tab {
+        min-width: 106px;
+        padding: 0 9px;
+      }
+
+      .workspace {
+        padding: 18px 14px 32px;
+      }
+
+      .study-module {
+        max-height: none;
+      }
+
+      .collection-desk-head {
+        grid-template-columns: 1fr;
+        gap: 14px;
+      }
+
+      .collection-head-actions {
+        justify-content: flex-start;
+      }
+
+      .collection-gallery {
+        width: calc(100% + 14px);
+        margin-right: -14px;
+      }
+
+      .collection-parallax-scene {
+        min-height: 940px;
+      }
+
+      .collections-module .collection-list {
+        padding-right: 14px;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .topbar {
+        min-height: 108px;
+        grid-template-columns: 1fr auto;
+        grid-template-rows: 48px 48px;
+      }
+
+      .brand strong {
+        font-size: 16px;
+      }
+
+      .primary-tabs {
+        grid-row: 2;
+        grid-column: 1 / -1;
+        width: 100%;
+        min-width: 0;
+      }
+
+      .primary-tab {
+        min-width: 0;
+      }
+
+      .header-actions {
+        grid-column: 2;
+        grid-row: 1;
+      }
+
+      .workspace {
+        min-height: calc(100vh - 108px);
+        padding-top: 16px;
+      }
+
+      .tab-stage,
+      .tab-panel,
+      .collections-module {
+        min-height: calc(100vh - 140px);
+      }
+
+      .collections-module {
+        min-height: calc(200dvh - 216px);
+      }
+
+      .collection-parallax-scene {
+        height: calc(200dvh - 216px);
+        min-height: 980px;
+      }
+
+      .collection-parallax-sticky {
+        top: 108px;
+        height: calc(100dvh - 108px);
+      }
+
+      .collection-heading-block {
+        display: block;
+      }
+
+      .collection-heading-block .module-kicker {
+        margin-bottom: 7px;
+      }
+
+      .collection-head-actions {
+        align-items: flex-start;
+      }
+
+      .filter-chips {
+        max-width: calc(100vw - 74px);
+        overflow-x: auto;
+      }
+
+      .filter-chip {
+        flex-shrink: 0;
+      }
+
+      .collections-module .collection-list {
+        min-height: 510px;
+        gap: 18px;
+      }
+
+      .collection-parallax-item {
+        flex-basis: min(82vw, 310px);
+        height: 480px;
+      }
+
+    }
+
+    /* Vertical Bento Collections flow */
+    .collections-module {
+      min-height: calc(100dvh - 128px);
+    }
+
+    .collection-parallax-scene {
+      height: auto;
+      min-height: 0;
+    }
+
+    .collection-parallax-sticky {
+      position: relative;
+      top: auto;
+      height: auto;
+      overflow: visible;
+    }
+
+    .collection-parallax-back,
+    .collection-parallax-far,
+    .collection-parallax-near {
+      position: absolute;
+      inset: 0;
+      transform: translate3d(0, var(--parallax-y, 0px), 0);
+    }
+
+    .collection-parallax-near {
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    .collection-parallax-near::before {
+      position: absolute;
+      top: 7%;
+      right: 8%;
+      bottom: 11%;
+      width: 1px;
+      background: rgba(239,244,240,.12);
+      box-shadow: -38vw 0 rgba(239,244,240,.07);
+      content: "";
+    }
+
+    .collection-parallax-near::after {
+      position: absolute;
+      top: 38%;
+      left: 8%;
+      width: min(38vw, 560px);
+      height: min(38vw, 560px);
+      border: 1px solid rgba(239,244,240,.1);
+      content: "";
+      transform: rotate(8deg);
+    }
+
+    .collection-desk-head {
+      margin-bottom: clamp(28px, 4vw, 54px);
+      transform: none;
+    }
+
+    .collection-gallery {
+      width: 100%;
+      margin-right: 0;
+    }
+
+    .collections-module .collection-list {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-auto-flow: dense;
+      grid-auto-rows: 8px;
+      gap: 18px;
+      align-items: start;
+      min-height: 0;
+      padding: 8px 0 clamp(70px, 8vw, 120px);
+      overflow: visible;
+      scroll-snap-type: none;
+    }
+
+    .collection-parallax-item {
+      width: auto;
+      height: auto;
+      min-width: 0;
+      margin: 0;
+      grid-row-end: span var(--masonry-span, 10);
+      transform: none;
+    }
+
+    .collections-module .collection-item {
+      width: 100%;
+      height: auto;
+      min-height: 190px;
+      padding: 29px 25px 24px;
+      border-color: rgba(25,34,29,.72);
+      border-radius: 1px;
+      box-shadow:
+        3px 3px 0 var(--artifact-edge),
+        6px 8px 18px rgba(14,25,20,.16);
+      transform-origin: 50% 50%;
+    }
+
+    .collections-module .collection-item.is-visible:hover {
+      transform: translateY(-5px) rotate(0deg);
+    }
+
+    .collection-name {
+      padding-bottom: 14px;
+      font-size: clamp(18px, 1.7vw, 24px);
+    }
+
+    .collection-detail {
+      margin-top: 13px;
+    }
+
+    .collection-preview {
+      margin: 22px 0 0;
+      color: rgba(34,48,41,.78);
+      font-family: var(--sans);
+      font-size: 13px;
+      line-height: 1.65;
+      white-space: normal;
+    }
+
+    .collection-kind {
+      margin-top: 28px;
+    }
+
+    @media (max-width: 760px) {
+      .collection-gallery {
+        width: 100%;
+        margin-right: 0;
+      }
+
+      .collections-module .collection-list {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+        padding-right: 0;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .collections-module,
+      .collection-parallax-scene {
+        height: auto;
+        min-height: calc(100dvh - 140px);
+      }
+
+      .collection-parallax-sticky {
+        top: auto;
+        height: auto;
+      }
+
+      .collections-module .collection-list {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 14px;
+        min-height: 0;
+      }
+
+      .collection-parallax-item,
+      .collection-parallax-item:nth-child(odd),
+      .collection-parallax-item:nth-child(even) {
+        width: 100%;
+        height: auto;
+        margin-right: 0;
+        margin-left: 0;
+      }
+
+      .collections-module .collection-item {
+        min-height: 0;
+      }
+
+      .toast {
+        right: auto;
+        left: 12px;
+        max-width: calc(100% - 24px);
+      }
+    }
+
+    /* Existing notebook functions, restyled for the workboard */
+    .study-module > .editor-sheet,
+    .study-module > .note-subview {
+      grid-column: 2;
+      grid-row: 1;
+    }
+
+    .study-module > .editor-sheet {
+      overflow-y: auto;
+      scrollbar-width: thin;
+    }
+
+    .editor-sheet[hidden],
+    .note-subview[hidden],
+    .media-drawer[hidden],
+    .history-results[hidden],
+    .history-reader[hidden] {
+      display: none !important;
+    }
+
+    .note-workspace-nav {
+      display: grid;
+      gap: 0;
+      margin: 22px -4px 4px;
+      border-top: 1px solid rgba(24,37,29,.26);
+    }
+
+    .note-workspace-nav button {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 43px;
+      padding: 0 8px;
+      border: 0;
+      border-bottom: 1px solid rgba(24,37,29,.2);
+      background: transparent;
+      color: rgba(24,37,29,.68);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 650;
+      text-align: left;
+    }
+
+    .note-workspace-nav button:hover {
+      background: rgba(255,255,255,.2);
+    }
+
+    .note-workspace-nav button[aria-pressed="true"] {
+      padding-left: 12px;
+      background: rgba(255,255,255,.43);
+      color: var(--ink);
+      box-shadow: inset 3px 0 0 var(--rust);
+    }
+
+    .note-workspace-nav b {
+      color: rgba(24,37,29,.48);
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 500;
+    }
+
+    .note-rail[data-subview="history"] .new-text-button,
+    .note-rail[data-subview="history"] .note-list,
+    .note-rail[data-subview="settings"] .new-text-button,
+    .note-rail[data-subview="settings"] .note-list {
+      display: none;
+    }
+
+    .note-rail[data-subview="history"] .rail-footer,
+    .note-rail[data-subview="settings"] .rail-footer {
+      margin-top: 22px;
+    }
+
+    .editor-meta-button {
+      min-height: 31px;
+      padding: 0 10px;
+      border: 1px solid rgba(24,37,29,.28);
+      border-radius: 1px;
+      background: rgba(255,255,255,.34);
+      color: var(--ink);
+      cursor: pointer;
+      font-family: var(--sans);
+      font-size: 11px;
+    }
+
+    .editor-meta-button.primary {
+      border-color: #315f4a;
+      background: #315f4a;
+      color: #fff;
+    }
+
+    .media-drawer {
+      margin: -4px 0 18px;
+      padding: 15px;
+      border: 1px solid rgba(24,37,29,.32);
+      background: rgba(238,227,156,.5);
+      box-shadow: 4px 4px 0 rgba(24,37,29,.1);
+    }
+
+    .media-drawer-head,
+    .media-drawer-controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .media-drawer-head {
+      justify-content: space-between;
+      margin-bottom: 11px;
+      font-size: 12px;
+    }
+
+    .media-drawer-head button {
+      width: 27px;
+      height: 27px;
+      border: 0;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .media-drawer-controls select,
+    .media-drawer-controls input,
+    .media-drawer-controls button {
+      min-height: 34px;
+      border: 1px solid rgba(24,37,29,.3);
+      border-radius: 1px;
+      background: rgba(255,255,255,.65);
+      color: var(--ink);
+      font-size: 11px;
+    }
+
+    .media-drawer-controls input {
+      min-width: 0;
+      flex: 1;
+      padding: 0 10px;
+    }
+
+    .media-drawer-controls button {
+      padding: 0 10px;
+      cursor: pointer;
+    }
+
+    .media-drawer p {
+      margin: 10px 0 0;
+      color: rgba(24,37,29,.58);
+      font-family: var(--mono);
+      font-size: 10px;
+    }
+
+    .media-preview {
+      margin-top: 13px;
+      padding-top: 13px;
+      border-top: 1px solid rgba(24,37,29,.2);
+    }
+
+    .media-preview iframe {
+      display: block;
+      width: 100%;
+      max-width: 620px;
+      aspect-ratio: 16 / 9;
+      border: 0;
+      background: #18251d;
+    }
+
+    .media-preview audio {
+      width: 100%;
+    }
+
+    .media-preview a {
+      color: #315f4a;
+      font-size: 11px;
+      overflow-wrap: anywhere;
+    }
+
+    .editor-more-tools {
+      position: relative;
+    }
+
+    .editor-more-tools summary {
+      display: grid;
+      width: 29px;
+      min-height: 29px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      font-family: var(--mono);
+      font-size: 12px;
+      list-style: none;
+      place-items: center;
+    }
+
+    .editor-more-tools summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .editor-more-tools[open] summary {
+      border-color: rgba(24,37,29,.25);
+      background: rgba(238,227,156,.55);
+    }
+
+    .editor-more-tools > div {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      z-index: 15;
+      display: grid;
+      grid-template-columns: repeat(5, 38px);
+      gap: 4px;
+      padding: 9px;
+      border: 1px solid rgba(24,37,29,.35);
+      background: #f8f4e9;
+      box-shadow: 5px 6px 0 rgba(24,37,29,.12);
+    }
+
+    .editor-more-tools > div button {
+      width: 38px;
+      min-height: 36px;
+      border: 1px solid rgba(24,37,29,.16);
+      background: rgba(255,255,255,.38);
+      color: var(--ink);
+      cursor: pointer;
+      font-size: 11px;
+    }
+
+    .editor-sheet.is-reading .editor-toolbar {
+      display: none;
+    }
+
+    .editor-sheet.is-reading .title-input {
+      pointer-events: none;
+    }
+
+    .editor-sheet.is-reading .editor-area {
+      cursor: text;
+    }
+
+    .editor-area table {
+      width: 100%;
+      margin: 18px 0;
+      border-collapse: collapse;
+    }
+
+    .editor-area td {
+      min-width: 80px;
+      padding: 7px 9px;
+      border: 1px solid rgba(24,37,29,.28);
+    }
+
+    .editor-area pre {
+      padding: 13px;
+      overflow-x: auto;
+      background: rgba(24,37,29,.07);
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    .editor-sheet.is-reading .edit-mode {
+      color: #315f4a;
+    }
+
+    .japanese-analyzer {
+      margin-top: 18px;
+      padding: 16px;
+      border: 1px solid rgba(24,37,29,.3);
+      background: rgba(213,203,232,.28);
+    }
+
+    .japanese-analyzer[hidden] {
+      display: none !important;
+    }
+
+    .japanese-analyzer header,
+    .japanese-input-row,
+    .japanese-options {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .japanese-analyzer header {
+      justify-content: space-between;
+    }
+
+    .japanese-analyzer header div {
+      display: flex;
+      gap: 10px;
+      align-items: baseline;
+    }
+
+    .japanese-analyzer header small,
+    #japaneseAnalyzerStatus {
+      color: rgba(24,37,29,.56);
+      font-family: var(--mono);
+      font-size: 10px;
+    }
+
+    .japanese-analyzer button,
+    .japanese-analyzer textarea {
+      border: 1px solid rgba(24,37,29,.27);
+      border-radius: 1px;
+      background: rgba(255,255,255,.52);
+      color: var(--ink);
+    }
+
+    .japanese-analyzer button {
+      min-height: 34px;
+      padding: 0 10px;
+      cursor: pointer;
+      font-size: 11px;
+    }
+
+    .japanese-input-row {
+      align-items: stretch;
+      margin-top: 13px;
+    }
+
+    .japanese-input-row textarea {
+      min-height: 72px;
+      flex: 1;
+      padding: 9px;
+      resize: vertical;
+      font-family: var(--serif);
+      font-size: 14px;
+    }
+
+    .japanese-options {
+      margin-top: 9px;
+      font-size: 11px;
+    }
+
+    .japanese-analysis-result {
+      display: flex;
+      gap: 7px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(24,37,29,.17);
+    }
+
+    .japanese-analysis-result[hidden] {
+      display: none !important;
+    }
+
+    .japanese-token {
+      display: grid;
+      min-width: 52px;
+      padding: 8px 10px;
+      border: 1px solid rgba(24,37,29,.2);
+      background: rgba(255,255,255,.42);
+      text-align: center;
+    }
+
+    .japanese-token ruby {
+      font-family: var(--serif);
+      font-size: 17px;
+    }
+
+    .japanese-token small {
+      margin-top: 3px;
+      color: rgba(24,37,29,.54);
+      font-family: var(--mono);
+      font-size: 9px;
+    }
+
+    .note-subview {
+      min-width: 0;
+      min-height: 710px;
+      overflow-y: auto;
+      padding: 34px clamp(25px, 3vw, 44px) 34px;
+      background:
+        repeating-linear-gradient(0deg, transparent 0 35px, var(--paper-line) 35px 36px),
+        rgba(247,244,235,.98);
+      color: var(--ink);
+      scrollbar-width: thin;
+    }
+
+    .history-head {
+      display: flex;
+      gap: 22px;
+      align-items: flex-start;
+      justify-content: space-between;
+      padding-bottom: 20px;
+      border-bottom: 1px solid rgba(24,37,29,.3);
+    }
+
+    .history-head h2,
+    .settings-sheet > h2 {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: clamp(28px, 3vw, 42px);
+      line-height: 1.1;
+    }
+
+    .history-head h2 small {
+      color: rgba(24,37,29,.48);
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    .history-head p,
+    .settings-block p {
+      margin: 8px 0 0;
+      color: rgba(24,37,29,.55);
+      font-size: 12px;
+    }
+
+    .history-head-actions,
+    .history-controls,
+    .history-switches,
+    .history-selection {
+      display: flex;
+      gap: 7px;
+      align-items: center;
+    }
+
+    .history-head-actions button,
+    .history-controls button,
+    .history-switches button,
+    .history-selection button,
+    .history-reader button,
+    .history-card-actions button,
+    .settings-block button {
+      min-height: 34px;
+      padding: 0 10px;
+      border: 1px solid rgba(24,37,29,.3);
+      border-radius: 1px;
+      background: rgba(255,255,255,.48);
+      color: var(--ink);
+      cursor: pointer;
+      font-size: 11px;
+    }
+
+    .history-head-actions button:last-child {
+      border-color: #315f4a;
+      background: #315f4a;
+      color: #fff;
+    }
+
+    .history-controls {
+      margin-top: 18px;
+    }
+
+    .history-controls input,
+    .history-controls select,
+    .settings-block select,
+    .settings-block input[type="range"] {
+      min-height: 36px;
+      padding: 0 9px;
+      border: 1px solid rgba(24,37,29,.3);
+      border-radius: 1px;
+      background: rgba(255,255,255,.5);
+      color: var(--ink);
+      font-size: 11px;
+    }
+
+    .history-controls input {
+      min-width: 190px;
+      flex: 1;
+    }
+
+    .history-switches {
+      justify-content: space-between;
+      margin-top: 10px;
+    }
+
+    .history-switches > div {
+      display: flex;
+      gap: 4px;
+    }
+
+    .history-switches button[aria-pressed="true"] {
+      border-color: #315f4a;
+      background: #e9e2b0;
+    }
+
+    .history-selection {
+      margin-top: 13px;
+      padding: 11px 0;
+      border-top: 1px solid rgba(24,37,29,.18);
+      border-bottom: 1px solid rgba(24,37,29,.18);
+      color: rgba(24,37,29,.66);
+      font-size: 11px;
+    }
+
+    .history-selection span {
+      margin-right: auto;
+      font-family: var(--mono);
+    }
+
+    .history-selection button:last-child {
+      color: #a74434;
+    }
+
+    .history-selection button:disabled {
+      cursor: not-allowed;
+      opacity: .42;
+    }
+
+    .history-status {
+      min-height: 18px;
+      margin: 8px 0;
+      color: #9f4a39;
+      font-size: 11px;
+    }
+
+    .history-results {
+      display: grid;
+      gap: 0;
+      margin-top: 4px;
+    }
+
+    .history-results[data-layout="grid"] {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .history-card {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 13px;
+      align-items: start;
+      padding: 20px 4px;
+      border-bottom: 1px solid rgba(24,37,29,.22);
+    }
+
+    .history-results[data-layout="grid"] .history-card {
+      grid-template-columns: auto minmax(0, 1fr);
+      padding: 19px;
+      border: 1px solid rgba(24,37,29,.32);
+      background: rgba(255,255,255,.36);
+      box-shadow: 4px 4px 0 rgba(24,37,29,.08);
+    }
+
+    .history-results[data-layout="grid"] .history-card-actions {
+      grid-column: 2;
+      justify-content: flex-start;
+    }
+
+    .history-card h3 {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: 16px;
+      line-height: 1.35;
+    }
+
+    .history-card h3 button {
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: var(--ink);
+      cursor: pointer;
+      font: inherit;
+      text-align: left;
+    }
+
+    .history-card small {
+      display: block;
+      margin-top: 5px;
+      color: rgba(24,37,29,.5);
+      font-family: var(--mono);
+      font-size: 10px;
+    }
+
+    .history-card p {
+      display: -webkit-box;
+      margin: 12px 0 0;
+      overflow: hidden;
+      color: rgba(24,37,29,.72);
+      font-family: var(--serif);
+      font-size: 13px;
+      line-height: 1.55;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 3;
+    }
+
+    .history-card-actions {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+    }
+
+    .history-card-actions button[data-history-delete] {
+      color: #a74434;
+    }
+
+    .history-reader {
+      padding: 24px;
+      border: 1px solid rgba(24,37,29,.34);
+      background: rgba(255,255,255,.48);
+      scroll-margin-top: 84px;
+    }
+
+    .history-reader header {
+      display: flex;
+      gap: 7px;
+      justify-content: flex-end;
+    }
+
+    .history-reader h3 {
+      margin: 23px 0 8px;
+      font-family: var(--serif);
+      font-size: 30px;
+    }
+
+    .history-reader > p {
+      color: rgba(24,37,29,.5);
+      font-family: var(--mono);
+      font-size: 10px;
+    }
+
+    #historyReaderBody {
+      margin-top: 24px;
+      font-family: var(--serif);
+      font-size: 16px;
+      line-height: 1.8;
+    }
+
+    .settings-sheet > .module-kicker {
+      margin-bottom: 8px;
+    }
+
+    .settings-block {
+      display: grid;
+      grid-template-columns: minmax(180px, 1fr) minmax(180px, .8fr);
+      gap: 18px 30px;
+      align-items: start;
+      margin-top: 27px;
+      padding: 22px 0;
+      border-top: 1px solid rgba(24,37,29,.28);
+    }
+
+    .settings-block h3 {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: 19px;
+    }
+
+    .settings-block label {
+      display: grid;
+      gap: 8px;
+      color: rgba(24,37,29,.66);
+      font-size: 11px;
+    }
+
+    .settings-block output {
+      font-family: var(--mono);
+    }
+
+    .restore-file input {
+      width: 100%;
+    }
+
+    #backupStatus {
+      grid-column: 2;
+      margin: 0;
+      color: rgba(24,37,29,.6);
+      font-size: 11px;
+    }
+
+    @media (max-width: 760px) {
+      .history-controls,
+      .history-selection {
+        flex-wrap: wrap;
+      }
+
+      .history-controls input {
+        width: 100%;
+        min-width: 100%;
+      }
+
+      .history-results[data-layout="grid"] {
+        grid-template-columns: 1fr;
+      }
+
+      .settings-block {
+        grid-template-columns: 1fr;
+      }
+
+      #backupStatus {
+        grid-column: 1;
+      }
+    }
+
+    @media (max-width: 650px) {
+      .study-module > .editor-sheet,
+      .study-module > .note-subview {
+        grid-column: auto;
+        grid-row: auto;
+      }
+
+      .note-workspace-nav {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        margin-top: 16px;
+      }
+
+      .note-workspace-nav button {
+        justify-content: center;
+        min-height: 46px;
+        border-right: 1px solid rgba(24,37,29,.2);
+      }
+
+      .note-workspace-nav b {
+        display: none;
+      }
+
+      .note-rail[data-subview="history"],
+      .note-rail[data-subview="settings"] {
+        min-height: 150px;
+      }
+
+      .note-subview {
+        min-height: 660px;
+        padding: 24px 18px;
+      }
+
+      .editor-meta {
+        flex-wrap: wrap;
+      }
+
+      .media-drawer-controls,
+      .history-head,
+      .japanese-input-row {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .media-drawer-controls input {
+        min-height: 42px;
+      }
+
+      .history-switches {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .history-card {
+        grid-template-columns: auto minmax(0, 1fr);
+      }
+
+      .history-card-actions {
+        grid-column: 2;
+        flex-wrap: wrap;
+      }
+
+      .editor-more-tools > div {
+        right: -8px;
+        grid-template-columns: repeat(4, 38px);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .collections-module,
+      .collection-parallax-scene {
+        height: auto;
+        min-height: calc(100dvh - 128px);
+      }
+
+      .collection-parallax-sticky {
+        position: relative;
+        top: auto;
+        height: auto;
+        min-height: calc(100dvh - 128px);
+        overflow: visible;
+      }
+
+      *,
+      *::before,
+      *::after {
+        scroll-behavior: auto !important;
+        transition-duration: .01ms !important;
+      }
+    }
+  </style>
+</head>
+<body data-theme="blueprint">
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="CoachOne 工作板">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <strong>CoachOne</strong>
+      <small>学习工作台</small>
+    </a>
+
+    <nav class="primary-tabs" id="primaryTabs" data-active="notes" role="tablist" aria-label="工作区">
+      <button class="primary-tab" id="notesTab" type="button" role="tab" data-tab="notes" aria-selected="true" aria-controls="notebookModule">学习笔记 <small id="notesTabCount">03</small></button>
+      <button class="primary-tab" id="collectionsTab" type="button" role="tab" data-tab="collections" aria-selected="false" aria-controls="collectionsModule">Collections <small id="collectionsTabCount">06</small></button>
+    </nav>
+
+    <div class="header-actions">
+      <label class="global-search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+          <circle cx="11" cy="11" r="6.5"></circle>
+          <path d="m16 16 4 4"></path>
+        </svg>
+        <input id="globalSearch" type="search" placeholder="搜索笔记或收藏…" aria-label="搜索笔记或收藏">
+      </label>
+      <span class="saved-state" id="savedState">已保存</span>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <div class="tab-stage">
+    <section class="study-module tab-panel is-active" id="notebookModule" data-panel="notes" role="tabpanel" aria-labelledby="notesTab">
+      <span class="paper-tape" aria-hidden="true"></span>
+
+      <aside class="note-rail">
+        <span class="module-kicker">Notebook · 01</span>
+        <div class="rail-title-row">
+          <h1 id="notebookHeading">学习笔记</h1>
+          <span class="note-count" id="noteCount">03</span>
+        </div>
+
+        <nav class="note-workspace-nav" aria-label="笔记功能">
+          <button type="button" data-note-subview="editor" aria-pressed="true">
+            <span>当前编辑</span><b>01</b>
+          </button>
+          <button type="button" data-note-subview="history" aria-pressed="false">
+            <span>历史全文</span><b id="historyNavCount">03</b>
+          </button>
+          <button type="button" data-note-subview="settings" aria-pressed="false">
+            <span>设置</span>
+          </button>
+        </nav>
+
+        <button class="new-text-button" id="newTextButton" type="button">
+          <span aria-hidden="true">＋</span> 新文本
+        </button>
+
+        <ul class="note-list" id="noteList" aria-label="学习笔记列表"></ul>
+
+        <div class="rail-footer">
+          <span id="languageSummary">NL 2 · JP 1</span><br>
+          <span id="updatedSummary">最近编辑：今天</span>
+        </div>
+      </aside>
+
+      <article class="editor-sheet" id="editorSubview" aria-label="文本编辑器">
+        <div class="editor-meta">
+          <label>
+            <span hidden>学习语言</span>
+            <select id="noteLanguage" aria-label="学习语言">
+              <option value="NL">NL · 荷兰语</option>
+              <option value="EN">EN · 英语</option>
+              <option value="JP">JP · 日语</option>
+              <option value="DE">DE · 德语</option>
+              <option value="FR">FR · 法语</option>
+            </select>
+          </label>
+          <label>
+            <span hidden>学习日期</span>
+            <input id="noteDate" type="date" aria-label="学习日期">
+          </label>
+          <button class="editor-meta-button" id="editorModeToggle" type="button" aria-pressed="false">阅读</button>
+          <button class="editor-meta-button" id="openMediaPanel" type="button">媒体</button>
+          <button class="editor-meta-button primary" id="saveFullText" type="button">保存全文</button>
+          <span class="edit-mode">Edit mode</span>
+        </div>
+
+        <section class="media-drawer" id="mediaDrawer" aria-label="媒体" hidden>
+          <div class="media-drawer-head">
+            <strong>媒体</strong>
+            <button type="button" id="closeMediaDrawer" aria-label="关闭媒体">×</button>
+          </div>
+          <div class="media-drawer-controls">
+            <select id="mediaType" aria-label="媒体类型">
+              <option value="video">视频</option>
+              <option value="audio">音频</option>
+            </select>
+            <input id="mediaUrl" type="url" placeholder="粘贴 YouTube、音频或文章链接…" aria-label="媒体链接">
+            <button type="button" id="attachMedia">保存链接</button>
+            <button type="button" id="removeMedia">删除</button>
+          </div>
+          <p id="mediaStatus">链接会随当前全文保存在本机。</p>
+          <div class="media-preview" id="mediaPreview" hidden></div>
+        </section>
+
+        <input class="title-input" id="noteTitle" type="text" placeholder="未命名文本" aria-label="文本标题" autocomplete="off">
+
+        <div class="editor-toolbar" aria-label="文本格式">
+          <button class="format-button" type="button" data-command="undo" aria-label="撤销">↶</button>
+          <button class="format-button" type="button" data-command="redo" aria-label="重做">↷</button>
+          <span class="toolbar-rule" aria-hidden="true"></span>
+          <button class="format-button" type="button" data-command="bold" aria-label="粗体"><strong>B</strong></button>
+          <button class="format-button" type="button" data-command="italic" aria-label="斜体"><em>I</em></button>
+          <button class="format-button" type="button" data-command="underline" aria-label="下划线"><u>U</u></button>
+          <button class="format-button" type="button" data-command="hiliteColor" data-value="#eee39c" aria-label="高亮">H</button>
+          <span class="toolbar-rule" aria-hidden="true"></span>
+          <button class="format-button" type="button" data-command="insertUnorderedList" aria-label="项目列表">≡</button>
+          <button class="format-button" type="button" data-command="formatBlock" data-value="blockquote" aria-label="引用">❝</button>
+          <details class="editor-more-tools">
+            <summary aria-label="更多编辑工具">•••</summary>
+            <div>
+              <button type="button" data-command="insertOrderedList" aria-label="编号列表">1.</button>
+              <button type="button" data-command="justifyLeft" aria-label="左对齐">≡←</button>
+              <button type="button" data-command="justifyCenter" aria-label="居中">≡</button>
+              <button type="button" data-command="justifyRight" aria-label="右对齐">→≡</button>
+              <button type="button" data-command="indent" aria-label="增加缩进">⇥</button>
+              <button type="button" data-command="outdent" aria-label="减少缩进">⇤</button>
+              <button type="button" data-editor-action="link" aria-label="添加链接">↗</button>
+              <button type="button" data-command="formatBlock" data-value="h2" aria-label="章节标题">H2</button>
+              <button type="button" data-command="formatBlock" data-value="h3" aria-label="小标题">H3</button>
+              <button type="button" data-command="formatBlock" data-value="pre" aria-label="代码块">&lt;/&gt;</button>
+              <button type="button" data-editor-action="divider" aria-label="分隔线">―</button>
+              <button type="button" data-editor-action="table" aria-label="插入表格">▦</button>
+              <button type="button" data-command="superscript" aria-label="上标">x²</button>
+              <button type="button" data-command="subscript" aria-label="下标">x₂</button>
+              <button type="button" data-command="removeFormat" aria-label="清除格式">Tx</button>
+            </div>
+          </details>
+        </div>
+
+        <div class="editor-area" id="editorArea" contenteditable="true" role="textbox" aria-multiline="true" aria-label="学习文本正文" spellcheck="true"></div>
+
+        <section class="japanese-analyzer" id="japaneseAnalyzer" aria-label="日语解析" hidden>
+          <header>
+            <div><strong>日语解析</strong><small>分词 · 假名 · 罗马字</small></div>
+            <button type="button" id="toggleJapaneseAnalyzer">收起</button>
+          </header>
+          <div id="japaneseAnalyzerBody">
+            <div class="japanese-input-row">
+              <textarea id="japaneseAnalyzerText" maxlength="2000" placeholder="输入日语，或选取正文…" aria-label="需要解析的日语文本"></textarea>
+              <button type="button" id="useJapaneseSelection">选取正文</button>
+              <button type="button" id="analyzeJapanese">解析</button>
+            </div>
+            <div class="japanese-options">
+              <label><input id="showJapaneseFurigana" type="checkbox" checked> 假名</label>
+              <label><input id="showJapaneseRomaji" type="checkbox" checked> 罗马字</label>
+            </div>
+            <div class="japanese-analysis-result" id="japaneseAnalysisResult" hidden></div>
+            <p id="japaneseAnalyzerStatus" role="status" aria-live="polite"></p>
+          </div>
+        </section>
+
+        <footer class="editor-foot">
+          <span id="wordCount">0 字</span>
+          <strong id="noteStatus">已保存到本机 · 刚刚</strong>
+        </footer>
+      </article>
+
+      <section class="history-sheet note-subview" id="historySubview" aria-label="历史全文" hidden>
+        <header class="history-head">
+          <div>
+            <span class="module-kicker">Archive · 02</span>
+            <h2>历史全文 <small id="historyTotalCount">03</small></h2>
+            <p>单击阅读；编辑会回到当前编辑。</p>
+          </div>
+          <div class="history-head-actions">
+            <button type="button" id="refreshHistory">刷新</button>
+            <button type="button" id="historyNewText">新建文本</button>
+          </div>
+        </header>
+
+        <div class="history-controls">
+          <input id="historySearch" type="search" placeholder="搜索标题、正文或备注…" aria-label="搜索历史全文">
+          <select id="historyLanguage" aria-label="历史全文语言">
+            <option value="all">全部语言</option>
+            <option value="NL">荷兰语</option>
+            <option value="EN">英语</option>
+            <option value="JP">日语</option>
+            <option value="DE">德语</option>
+            <option value="FR">法语</option>
+          </select>
+          <select id="historySort" aria-label="历史全文排序">
+            <option value="updated">最近更新</option>
+            <option value="date">学习日期</option>
+            <option value="title">名称</option>
+            <option value="language">语言</option>
+          </select>
+          <button type="button" id="clearHistoryFilters">清除筛选</button>
+        </div>
+
+        <div class="history-switches">
+          <div role="group" aria-label="历史全文范围">
+            <button type="button" data-history-scope="all" aria-pressed="true">全部</button>
+            <button type="button" data-history-scope="recent" aria-pressed="false">最近更新</button>
+            <button type="button" data-history-scope="trash" aria-pressed="false">回收站</button>
+          </div>
+          <div role="group" aria-label="历史全文布局">
+            <button type="button" data-history-layout="list" aria-pressed="true">列表</button>
+            <button type="button" data-history-layout="grid" aria-pressed="false">网格</button>
+          </div>
+        </div>
+
+        <div class="history-selection">
+          <label><input id="historySelectAll" type="checkbox"> 全选当前结果</label>
+          <span id="historySelectionCount">已选 0 项</span>
+          <button type="button" id="historyExportSelected" disabled>下载全文备份</button>
+          <button type="button" id="historyDeleteSelected" disabled>移入回收站</button>
+        </div>
+
+        <p class="history-status" id="historyStatus" role="status" aria-live="polite"></p>
+
+        <article class="history-reader" id="historyReader" hidden>
+          <header>
+            <button type="button" id="closeHistoryReader">返回列表</button>
+            <button type="button" id="editHistoryReader">编辑内容</button>
+          </header>
+          <h3 id="historyReaderTitle"></h3>
+          <p id="historyReaderMeta"></p>
+          <div id="historyReaderBody"></div>
+        </article>
+
+        <div class="history-results" id="historyResults" data-layout="list"></div>
+      </section>
+
+      <section class="settings-sheet note-subview" id="settingsSubview" aria-label="设置" hidden>
+        <span class="module-kicker">Settings · 03</span>
+        <h2>设置</h2>
+
+        <div class="settings-block">
+          <div>
+            <h3>显示</h3>
+            <p>调整原型字号与界面语言。</p>
+          </div>
+          <label>界面语言
+            <select id="prototypeLanguage">
+              <option value="zh">中文</option>
+              <option value="en">English</option>
+            </select>
+          </label>
+          <label>全站字号
+            <input id="prototypeFontScale" type="range" min="90" max="125" step="5" value="100">
+            <output id="prototypeFontScaleValue">100%</output>
+          </label>
+        </div>
+
+        <div class="settings-block">
+          <div>
+            <h3>媒体与朗读</h3>
+            <p>应用于已嵌入音频与浏览器朗读。</p>
+          </div>
+          <label>播放速度
+            <select id="prototypeAudioSpeed">
+              <option value="0.7">慢速 · 0.7×</option>
+              <option value="0.85">较慢 · 0.85×</option>
+              <option value="1">正常 · 1.0×</option>
+              <option value="1.15">较快 · 1.15×</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="settings-block">
+          <div>
+            <h3>文件备份</h3>
+            <p>导出或恢复笔记、历史全文与 Collections。</p>
+          </div>
+          <button type="button" id="downloadPrototypeBackup">下载备份</button>
+          <label class="restore-file">选择备份文件
+            <input id="restorePrototypeBackup" type="file" accept="application/json,.json">
+          </label>
+          <p id="backupStatus" role="status" aria-live="polite"></p>
+        </div>
+      </section>
+    </section>
+
+    <section class="collections-module tab-panel" id="collectionsModule" data-panel="collections" role="tabpanel" aria-labelledby="collectionsTab" hidden>
+      <div class="collection-parallax-scene" id="collectionParallaxScene">
+        <div class="collection-parallax-sticky" id="collectionParallaxSticky">
+          <div class="collection-parallax-back" data-parallax-factor="0.15" aria-hidden="true"></div>
+          <div class="collection-parallax-far" data-parallax-factor="0.4" aria-hidden="true"></div>
+          <div class="collection-parallax-near" data-parallax-factor="0.7" aria-hidden="true"></div>
+
+          <header class="collection-desk-head">
+            <div class="collection-heading-block">
+              <span class="module-kicker">Collections · 02</span>
+              <div class="collection-title-row">
+                <h2 id="collectionsHeading">收藏夹</h2>
+              </div>
+              <p class="collection-summary"><span id="collectionCount">06</span> ITEMS · <span id="activeCollectionLabel">全部</span></p>
+            </div>
+            <div class="collection-head-actions">
+              <nav class="filter-chips" aria-label="收藏分类">
+                <button class="filter-chip" type="button" data-filter="all" aria-pressed="true">全部</button>
+                <button class="filter-chip" type="button" data-filter="video" aria-pressed="false">视频</button>
+                <button class="filter-chip" type="button" data-filter="article" aria-pressed="false">文章</button>
+                <button class="filter-chip" type="button" data-filter="tool" aria-pressed="false">工具</button>
+              </nav>
+              <button class="add-resource-button" id="addResourceButton" type="button" aria-label="添加收藏"><span aria-hidden="true">＋</span> 收藏</button>
+            </div>
+          </header>
+
+          <div class="collection-gallery">
+            <ul class="collection-list" id="collectionList" aria-label="收藏列表"></ul>
+            <div class="collection-empty" id="collectionEmpty" hidden>这一页还是空的。</div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+    </div>
+  </main>
+
+  <div class="modal-backdrop" id="resourceModal" hidden>
+    <section class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="resourceModalTitle">
+      <header class="modal-head">
+        <div>
+          <span class="module-kicker">New collection</span>
+          <h2 id="resourceModalTitle">添加收藏</h2>
+        </div>
+        <button class="modal-close" id="closeResourceModal" type="button" aria-label="关闭">×</button>
+      </header>
+
+      <form class="resource-form" id="resourceForm">
+        <label class="field-label">
+          名称
+          <input class="field-input" id="resourceTitle" type="text" placeholder="例如：荷兰语慢速新闻" autocomplete="off" required>
+        </label>
+
+        <label class="field-label">
+          类型
+          <span class="custom-dropdown" id="resourceKindDropdown">
+            <button class="dropdown-trigger" id="resourceKindTrigger" type="button" aria-haspopup="listbox" aria-expanded="false">文章</button>
+            <span class="dropdown-menu" role="listbox" aria-label="收藏类型">
+              <button class="dropdown-option" type="button" role="option" data-kind-value="article" aria-selected="true">文章</button>
+              <button class="dropdown-option" type="button" role="option" data-kind-value="video" aria-selected="false">视频</button>
+              <button class="dropdown-option" type="button" role="option" data-kind-value="tool" aria-selected="false">工具</button>
+            </span>
+            <input id="resourceKind" type="hidden" value="article">
+          </span>
+        </label>
+
+        <label class="field-label">
+          来源或备注
+          <input class="field-input" id="resourceDetail" type="text" placeholder="链接、来源或简短备注" autocomplete="off">
+        </label>
+
+        <footer class="modal-actions">
+          <button class="modal-button" id="cancelResourceModal" type="button">取消</button>
+          <button class="modal-button primary" type="submit">加入 Collections</button>
+        </footer>
+      </form>
+    </section>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    (() => {
+      const STORAGE_KEY = "coachone-tabbed-prototype-v1";
+      const initialState = {
+        theme: "blueprint",
+        activeTab: "notes",
+        noteSubview: "editor",
+        editorMode: "edit",
+        japaneseAnalyzerOpen: true,
+        selectedNoteId: "note-nl",
+        collectionFilter: "all",
+        historyLayout: "list",
+        preferences: {
+          displayLanguage: "zh",
+          fontScale: 100,
+          audioSpeed: 1
+        },
+        trashNotes: [],
+        notes: [
+          {
+            id: "note-nl",
+            title: "荷兰语 · 今日跟读",
+            language: "NL",
+            date: "2026-11-24",
+            updated: "09:42",
+            content: "<p>Vandaag wil ik oefenen met rustig en duidelijk spreken.</p><p>Ik hoef niet ieder woord perfect uit te spreken. Het belangrijkste is dat ik blijf praten en goed luister naar het ritme van de zin.</p><blockquote>Niet perfect spreken, wel blijven spreken.</blockquote>"
+          },
+          {
+            id: "note-jp",
+            title: "ニュース・シャドーイング",
+            language: "JP",
+            date: "2026-11-23",
+            updated: "昨天",
+            content: "<p>今日はニュースの短い段落を使って、アクセントと間の取り方を練習する。</p><p>一度聞いてから、文章を見ないで言ってみる。</p>"
+          },
+          {
+            id: "note-presentation",
+            title: "English presentation",
+            language: "EN",
+            date: "2026-11-21",
+            updated: "11月21日",
+            content: "<p>Opening: explain the problem in one sentence.</p><p>Keep each example concrete, then end with one clear recommendation.</p>"
+          }
+        ],
+        resources: [
+          { id: "resource-1", title: "荷兰语发音：R 与 G", detail: "YouTube · 12 min", kind: "video", content: "跟读最小对立词，记录口型与喉音位置。\n重点听辨 Amsterdam R、G 与 ch。" },
+          { id: "resource-2", title: "常见可分动词整理", detail: "Dutch Grammar · 阅读 8 min", kind: "article", content: "opbellen · opgebeld\nmeebrengen · meegebracht\nuitnodigen · uitgenodigd" },
+          { id: "resource-3", title: "慢速新闻跟读清单", detail: "NPO Luister · 14 集", kind: "video", content: "NOS Journaal\nNPO Radio 1\nZondag met Lubach\n每周完成 3 段跟读并复盘。" },
+          { id: "resource-4", title: "本周语法：从句语序", detail: "Taalportaal · 备查", kind: "article", content: "主句：动词保持第二位。\n从句：变位动词移到句末。\n用 5 组例句做替换练习。" },
+          { id: "resource-5", title: "Forvo 发音词典", detail: "发音工具 · Dutch", kind: "tool", content: "按地区与说话人筛选真实发音。" },
+          { id: "resource-6", title: "DeepL Write", detail: "写作工具 · NL / EN", kind: "tool", content: "改写邮件和学习笔记，检查语气与自然度。" }
+        ]
+      };
+
+      const state = loadState();
+      const noteList = document.querySelector("#noteList");
+      const noteCount = document.querySelector("#noteCount");
+      const noteLanguage = document.querySelector("#noteLanguage");
+      const noteDate = document.querySelector("#noteDate");
+      const noteTitle = document.querySelector("#noteTitle");
+      const editorArea = document.querySelector("#editorArea");
+      const wordCount = document.querySelector("#wordCount");
+      const noteStatus = document.querySelector("#noteStatus");
+      const collectionList = document.querySelector("#collectionList");
+      const collectionEmpty = document.querySelector("#collectionEmpty");
+      const collectionCount = document.querySelector("#collectionCount");
+      const activeCollectionLabel = document.querySelector("#activeCollectionLabel");
+      const globalSearch = document.querySelector("#globalSearch");
+      const savedState = document.querySelector("#savedState");
+      const toast = document.querySelector("#toast");
+      const primaryTabs = document.querySelector("#primaryTabs");
+      const resourceModal = document.querySelector("#resourceModal");
+      const resourceForm = document.querySelector("#resourceForm");
+      const resourceTitle = document.querySelector("#resourceTitle");
+      const resourceDetail = document.querySelector("#resourceDetail");
+      const resourceKind = document.querySelector("#resourceKind");
+      const resourceKindDropdown = document.querySelector("#resourceKindDropdown");
+      const resourceKindTrigger = document.querySelector("#resourceKindTrigger");
+      const collectionParallaxScene = document.querySelector("#collectionParallaxScene");
+      const collectionParallaxSticky = document.querySelector("#collectionParallaxSticky");
+      const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+      const noteRail = document.querySelector(".note-rail");
+      const editorSubview = document.querySelector("#editorSubview");
+      const historySubview = document.querySelector("#historySubview");
+      const settingsSubview = document.querySelector("#settingsSubview");
+      const mediaDrawer = document.querySelector("#mediaDrawer");
+      const mediaType = document.querySelector("#mediaType");
+      const mediaUrl = document.querySelector("#mediaUrl");
+      const mediaStatus = document.querySelector("#mediaStatus");
+      const mediaPreview = document.querySelector("#mediaPreview");
+      const editorModeToggle = document.querySelector("#editorModeToggle");
+      const japaneseAnalyzer = document.querySelector("#japaneseAnalyzer");
+      const japaneseAnalyzerBody = document.querySelector("#japaneseAnalyzerBody");
+      const japaneseAnalyzerText = document.querySelector("#japaneseAnalyzerText");
+      const japaneseAnalysisResult = document.querySelector("#japaneseAnalysisResult");
+      const historyResults = document.querySelector("#historyResults");
+      const historyReader = document.querySelector("#historyReader");
+      const historySearch = document.querySelector("#historySearch");
+      const historyLanguage = document.querySelector("#historyLanguage");
+      const historySort = document.querySelector("#historySort");
+      const historySelectAll = document.querySelector("#historySelectAll");
+      const historyStatus = document.querySelector("#historyStatus");
+      const prototypeLanguage = document.querySelector("#prototypeLanguage");
+      const prototypeFontScale = document.querySelector("#prototypeFontScale");
+      const prototypeAudioSpeed = document.querySelector("#prototypeAudioSpeed");
+      const backupStatus = document.querySelector("#backupStatus");
+      const kindLabels = { video: "视频", article: "文章", tool: "工具" };
+      const kindSymbols = { video: "▶", article: "↗", tool: "⌘" };
+      const languageLabels = { NL: "荷兰语", EN: "英语", JP: "日语", DE: "德语", FR: "法语" };
+      let saveTimer = 0;
+      let statusTimer = 0;
+      let toastTimer = 0;
+      let modalTimer = 0;
+      let parallaxFrame = 0;
+      let masonryFrame = 0;
+      let masonryObserver;
+      let revealObserver;
+      let historyScope = "all";
+      let selectedHistoryIds = new Set();
+      let activeReaderId = "";
+
+      function clone(value) {
+        return JSON.parse(JSON.stringify(value));
+      }
+
+      function loadState() {
+        try {
+          const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+          if (stored?.notes?.length && Array.isArray(stored.resources)) {
+            const resourceDefaults = new Map(initialState.resources.map((resource) => [resource.id, resource]));
+            return {
+              ...clone(initialState),
+              ...stored,
+              preferences: {
+                ...clone(initialState.preferences),
+                ...(stored.preferences || {})
+              },
+              notes: stored.notes.map((note, index) => ({
+                ...note,
+                media: note.media || null,
+                updatedAt: Number(note.updatedAt) || Date.parse(note.date || "") || Date.now() - index
+              })),
+              trashNotes: Array.isArray(stored.trashNotes)
+                ? stored.trashNotes.map((note, index) => ({
+                    ...note,
+                    media: note.media || null,
+                    updatedAt: Number(note.updatedAt) || Date.parse(note.date || "") || Date.now() - index
+                  }))
+                : [],
+              resources: stored.resources.map((resource) => ({
+                ...clone(resourceDefaults.get(resource.id) || {}),
+                ...resource,
+                content: resource.content || resourceDefaults.get(resource.id)?.content || resource.detail
+              }))
+            };
+          }
+        } catch (error) {
+          console.warn("Could not restore prototype state.", error);
+        }
+        return clone(initialState);
+      }
+
+      function saveState() {
+        window.clearTimeout(saveTimer);
+        savedState.classList.remove("is-error");
+        savedState.classList.add("is-saving");
+        savedState.textContent = "保存中";
+        noteStatus.textContent = "正在保存…";
+        saveTimer = window.setTimeout(() => {
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(persistableState()));
+            savedState.classList.remove("is-saving", "is-error");
+            savedState.textContent = "已保存";
+            noteStatus.textContent = "已保存到本机 · 刚刚";
+          } catch (error) {
+            savedState.classList.remove("is-saving");
+            savedState.classList.add("is-error");
+            savedState.textContent = "保存失败";
+            noteStatus.textContent = "保存失败，请重试";
+            console.warn(error);
+          }
+        }, 180);
+      }
+
+      function announce(message) {
+        window.clearTimeout(toastTimer);
+        toast.textContent = message;
+        toast.classList.add("show");
+        toastTimer = window.setTimeout(() => toast.classList.remove("show"), 1600);
+      }
+
+      // Motion Prompt #073 · MIT License (c) 2026 Shohei Ohtaki · https://showheyohtaki.github.io/motion-prompt/#073
+      function updateCollectionParallax() {
+        parallaxFrame = 0;
+        if (!collectionParallaxScene || !collectionParallaxSticky) return;
+
+        const layers = collectionParallaxScene.querySelectorAll("[data-parallax-factor]");
+        if (reducedMotionQuery.matches || state.activeTab !== "collections") {
+          layers.forEach((layer) => layer.style.setProperty("--parallax-y", "0px"));
+          return;
+        }
+
+        const topbarHeight = document.querySelector(".topbar")?.offsetHeight || 64;
+        const sceneRect = collectionParallaxScene.getBoundingClientRect();
+        const scrollRange = Math.max(1, collectionParallaxScene.offsetHeight - window.innerHeight + topbarHeight);
+        const localScroll = Math.min(scrollRange, Math.max(0, topbarHeight - sceneRect.top));
+
+        layers.forEach((layer) => {
+          const factor = Number(layer.dataset.parallaxFactor) || 1;
+          const compensation = localScroll * (1 - factor);
+          layer.style.setProperty("--parallax-y", `${compensation.toFixed(2)}px`);
+        });
+      }
+
+      function queueCollectionParallax() {
+        if (parallaxFrame) return;
+        parallaxFrame = requestAnimationFrame(updateCollectionParallax);
+      }
+
+      function layoutCollectionMasonry() {
+        masonryFrame = 0;
+        if (!collectionList || collectionList.hidden) return;
+        const styles = getComputedStyle(collectionList);
+        const rowHeight = Number.parseFloat(styles.gridAutoRows) || 8;
+        const rowGap = Number.parseFloat(styles.rowGap) || 0;
+
+        collectionList.querySelectorAll(".collection-parallax-item").forEach((item) => {
+          item.style.gridRowEnd = "auto";
+          const card = item.querySelector(".collection-item");
+          if (!card) return;
+          const cardHeight = card.getBoundingClientRect().height;
+          const span = Math.max(1, Math.ceil((cardHeight + rowGap) / (rowHeight + rowGap)));
+          item.style.gridRowEnd = `span ${span}`;
+        });
+      }
+
+      function queueCollectionMasonry() {
+        if (masonryFrame) return;
+        masonryFrame = requestAnimationFrame(layoutCollectionMasonry);
+      }
+
+      function setActiveTab(name, animate = true) {
+        const nextPanel = document.querySelector(`[data-panel="${name}"]`);
+        const currentPanel = document.querySelector(".tab-panel.is-active");
+        if (!nextPanel) return;
+
+        state.activeTab = name;
+        document.body.dataset.workspace = name;
+        primaryTabs.dataset.active = name;
+        primaryTabs.querySelectorAll("[data-tab]").forEach((button) => {
+          button.setAttribute("aria-selected", String(button.dataset.tab === name));
+        });
+
+        if (currentPanel === nextPanel) return;
+
+        const showNext = () => {
+          document.querySelectorAll(".tab-panel").forEach((panel) => {
+            if (panel !== nextPanel) {
+              panel.hidden = true;
+              panel.classList.remove("is-active", "is-leaving");
+            }
+          });
+          nextPanel.hidden = false;
+          requestAnimationFrame(() => {
+            nextPanel.classList.add("is-active");
+            if (name === "collections") {
+              observeReveals();
+              queueCollectionParallax();
+              queueCollectionMasonry();
+            }
+          });
+        };
+
+        if (!animate || !currentPanel) {
+          showNext();
+        } else {
+          currentPanel.classList.add("is-leaving");
+          window.setTimeout(showNext, 100);
+        }
+        if (name === "notes" && currentPanel?.dataset.panel === "collections") {
+          window.setTimeout(() => window.scrollTo({
+            top: 0,
+            behavior: reducedMotionQuery.matches ? "auto" : "smooth"
+          }), 110);
+        }
+        saveState();
+      }
+
+      function setupRevealObserver() {
+        if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+        revealObserver = new IntersectionObserver((entries) => {
+          entries.forEach((entry) => {
+            if (!entry.isIntersecting) return;
+            entry.target.classList.add("is-visible");
+            revealObserver.unobserve(entry.target);
+          });
+        }, { threshold: 0.08 });
+      }
+
+      function observeReveals() {
+        const elements = document.querySelectorAll(".reveal:not(.is-visible)");
+        if (!revealObserver) {
+          elements.forEach((element) => element.classList.add("is-visible"));
+          return;
+        }
+        elements.forEach((element) => revealObserver.observe(element));
+      }
+
+      function openResourceModal() {
+        window.clearTimeout(modalTimer);
+        resourceForm.reset();
+        resourceKind.value = state.collectionFilter === "all" ? "article" : state.collectionFilter;
+        setResourceKind(resourceKind.value);
+        resourceModal.hidden = false;
+        requestAnimationFrame(() => resourceModal.classList.add("is-open"));
+        window.setTimeout(() => resourceTitle.focus(), 180);
+      }
+
+      function closeResourceModal() {
+        resourceModal.classList.remove("is-open");
+        closeDropdown();
+        modalTimer = window.setTimeout(() => {
+          resourceModal.hidden = true;
+          document.querySelector("#addResourceButton").focus();
+        }, 300);
+      }
+
+      function setResourceKind(value) {
+        resourceKind.value = value;
+        resourceKindTrigger.textContent = kindLabels[value];
+        resourceKindDropdown.querySelectorAll("[data-kind-value]").forEach((option) => {
+          option.setAttribute("aria-selected", String(option.dataset.kindValue === value));
+        });
+      }
+
+      function toggleDropdown(force) {
+        const next = typeof force === "boolean"
+          ? force
+          : !resourceKindDropdown.classList.contains("is-open");
+        resourceKindDropdown.classList.toggle("is-open", next);
+        resourceKindTrigger.setAttribute("aria-expanded", String(next));
+      }
+
+      function closeDropdown() {
+        toggleDropdown(false);
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      function sanitizeNoteHtml(value) {
+        const template = document.createElement("template");
+        template.innerHTML = String(value || "");
+        template.content.querySelectorAll("script, style, iframe, object, embed, form, input, button").forEach((node) => node.remove());
+        template.content.querySelectorAll("*").forEach((node) => {
+          [...node.attributes].forEach((attribute) => {
+            const name = attribute.name.toLowerCase();
+            const unsafeLink = ["href", "src"].includes(name) && /^\s*javascript:/i.test(attribute.value);
+            if (name.startsWith("on") || name === "srcdoc" || unsafeLink) node.removeAttribute(attribute.name);
+          });
+        });
+        return template.innerHTML;
+      }
+
+      function plainText(value) {
+        const host = document.createElement("div");
+        host.innerHTML = sanitizeNoteHtml(value);
+        return host.textContent.replace(/\s+/g, " ").trim();
+      }
+
+      function noteUpdatedTime(note) {
+        return Number(note?.updatedAt) || Date.parse(note?.date || "") || 0;
+      }
+
+      function formatNoteDate(note) {
+        const date = note?.date ? new Date(`${note.date}T12:00:00`) : null;
+        const dateLabel = date && !Number.isNaN(date.valueOf())
+          ? new Intl.DateTimeFormat(state.preferences.displayLanguage === "en" ? "en-GB" : "zh-CN", {
+              year: "numeric",
+              month: "short",
+              day: "2-digit"
+            }).format(date)
+          : "未设置日期";
+        return `${languageLabels[note?.language] || note?.language || "—"} · ${dateLabel}`;
+      }
+
+      const interfaceEnglish = {
+        "学习笔记": "Study notes",
+        "收藏夹": "Collections",
+        "当前编辑": "Editor",
+        "历史全文": "Documents",
+        "设置": "Settings",
+        "新文本": "New text",
+        "媒体": "Media",
+        "保存全文": "Save document",
+        "阅读": "Read",
+        "编辑": "Edit",
+        "编辑模式": "Edit mode",
+        "刷新": "Refresh",
+        "新建文本": "New document",
+        "清除筛选": "Clear filters",
+        "全部": "All",
+        "最近更新": "Recent",
+        "回收站": "Trash",
+        "列表": "List",
+        "网格": "Grid",
+        "全选当前结果": "Select current results",
+        "下载全文备份": "Download selected",
+        "移入回收站": "Move to trash",
+        "显示": "Display",
+        "界面语言": "Interface language",
+        "全站字号": "Site font size",
+        "文件备份": "File backup",
+        "媒体与朗读": "Media & speech",
+        "播放速度": "Playback speed",
+        "下载备份": "Download backup",
+        "选择备份文件": "Choose backup file",
+        "视频": "Video",
+        "音频": "Audio",
+        "保存链接": "Save link",
+        "删除": "Delete",
+        "返回列表": "Back to list",
+        "编辑内容": "Edit",
+        "添加收藏": "Add collection",
+        "名称": "Title",
+        "类型": "Type",
+        "来源或备注": "Source or note",
+        "取消": "Cancel",
+        "加入 Collections": "Add to Collections",
+        "文章": "Article",
+        "工具": "Tool",
+        "日语解析": "Japanese analyzer",
+        "收起": "Collapse",
+        "展开": "Expand",
+        "解析": "Analyze",
+        "选取正文": "Use document",
+        "今天": "Today"
+      };
+
+      function translateInterface() {
+        const language = state.preferences.displayLanguage;
+        document.documentElement.lang = language === "en" ? "en" : "zh-CN";
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+        let node;
+        while ((node = walker.nextNode())) {
+          if (node.parentElement?.closest("script, style, [contenteditable='true'], #editorArea, .collection-preview")) continue;
+          if (!Object.hasOwn(node, "__zhOriginal")) node.__zhOriginal = node.nodeValue;
+          const original = node.__zhOriginal;
+          if (language !== "en") {
+            node.nodeValue = original;
+            continue;
+          }
+          const label = original.trim();
+          if (!interfaceEnglish[label]) continue;
+          node.nodeValue = original.replace(label, interfaceEnglish[label]);
+        }
+        const placeholderTranslations = new Map([
+          ["搜索笔记、收藏…", "Search notes and collections…"],
+          ["搜索标题、正文或备注…", "Search title, text, or notes…"],
+          ["未命名文本", "Untitled document"],
+          ["粘贴 YouTube、音频或文章链接…", "Paste a YouTube, audio, or article URL…"]
+        ]);
+        document.querySelectorAll("[placeholder]").forEach((field) => {
+          if (!field.dataset.zhPlaceholder) field.dataset.zhPlaceholder = field.placeholder;
+          field.placeholder = language === "en"
+            ? placeholderTranslations.get(field.dataset.zhPlaceholder) || field.dataset.zhPlaceholder
+            : field.dataset.zhPlaceholder;
+        });
+      }
+
+      function applyPreferences() {
+        const scale = Math.max(90, Math.min(125, Number(state.preferences.fontScale) || 100));
+        state.preferences.fontScale = scale;
+        document.body.style.zoom = String(scale / 100);
+        prototypeLanguage.value = state.preferences.displayLanguage;
+        prototypeFontScale.value = String(scale);
+        prototypeAudioSpeed.value = String(state.preferences.audioSpeed || 1);
+        document.querySelector("#prototypeFontScaleValue").textContent = `${scale}%`;
+        mediaPreview.querySelectorAll("audio").forEach((audio) => {
+          audio.playbackRate = Number(state.preferences.audioSpeed) || 1;
+        });
+        translateInterface();
+      }
+
+      function setNoteSubview(name, { persist = true } = {}) {
+        if (!["editor", "history", "settings"].includes(name)) return;
+        state.noteSubview = name;
+        noteRail.dataset.subview = name;
+        editorSubview.hidden = name !== "editor";
+        historySubview.hidden = name !== "history";
+        settingsSubview.hidden = name !== "settings";
+        noteRail.querySelectorAll("[data-note-subview]").forEach((button) => {
+          button.setAttribute("aria-pressed", String(button.dataset.noteSubview === name));
+        });
+        if (name !== "editor") mediaDrawer.hidden = true;
+        if (name === "history") renderHistory();
+        if (name === "settings") applyPreferences();
+        if (persist) saveState();
+      }
+
+      function loadMediaPanel() {
+        const media = currentNote()?.media;
+        mediaType.value = media?.type || "video";
+        mediaUrl.value = media?.url || "";
+        mediaStatus.textContent = media?.url
+          ? `${media.type === "audio" ? "音频" : "视频"}链接已随全文保存。`
+          : "链接会随当前全文保存在本机。";
+        renderMediaPreview();
+      }
+
+      function youtubeIdFromUrl(value) {
+        try {
+          const url = new URL(value);
+          if (url.hostname === "youtu.be") return url.pathname.split("/").filter(Boolean)[0] || "";
+          if (url.hostname.endsWith("youtube.com")) return url.searchParams.get("v") || url.pathname.split("/embed/")[1] || "";
+        } catch (error) {
+          return "";
+        }
+        return "";
+      }
+
+      function renderMediaPreview() {
+        const media = currentNote()?.media;
+        mediaPreview.innerHTML = "";
+        mediaPreview.hidden = !media?.url;
+        if (!media?.url) return;
+        if (media.type === "audio") {
+          const audio = document.createElement("audio");
+          audio.controls = true;
+          audio.preload = "metadata";
+          audio.src = media.url;
+          audio.playbackRate = Number(state.preferences.audioSpeed) || 1;
+          mediaPreview.append(audio);
+          return;
+        }
+        const youtubeId = youtubeIdFromUrl(media.url);
+        if (youtubeId && /^[\w-]{6,20}$/.test(youtubeId)) {
+          const frame = document.createElement("iframe");
+          frame.title = "已保存的视频";
+          frame.src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(youtubeId)}?rel=0`;
+          frame.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
+          frame.allowFullscreen = true;
+          mediaPreview.append(frame);
+          return;
+        }
+        const link = document.createElement("a");
+        link.href = media.url;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = "在新窗口打开已保存的媒体";
+        mediaPreview.append(link);
+      }
+
+      function saveMediaLink() {
+        const note = currentNote();
+        const url = mediaUrl.value.trim();
+        if (!note || !url) {
+          mediaUrl.focus();
+          return;
+        }
+        try {
+          const parsed = new URL(url);
+          if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("Unsupported URL");
+        } catch (error) {
+          mediaStatus.textContent = "请输入完整的 http(s) 链接。";
+          mediaUrl.focus();
+          return;
+        }
+        note.media = { type: mediaType.value, url };
+        note.updatedAt = Date.now();
+        note.updated = "刚刚";
+        mediaStatus.textContent = "链接已随全文保存。";
+        renderMediaPreview();
+        renderNoteList();
+        renderHistory();
+        saveState();
+        announce("媒体链接已保存");
+      }
+
+      function removeMediaLink() {
+        const note = currentNote();
+        if (!note) return;
+        note.media = null;
+        mediaUrl.value = "";
+        mediaStatus.textContent = "当前全文没有媒体链接。";
+        renderMediaPreview();
+        note.updatedAt = Date.now();
+        renderHistory();
+        saveState();
+      }
+
+      function applyEditorMode() {
+        const reading = state.editorMode === "read";
+        editorSubview.classList.toggle("is-reading", reading);
+        editorArea.contentEditable = String(!reading);
+        noteTitle.readOnly = reading;
+        noteLanguage.disabled = reading;
+        noteDate.disabled = reading;
+        editorModeToggle.textContent = reading ? "编辑" : "阅读";
+        editorModeToggle.setAttribute("aria-pressed", String(reading));
+        editorSubview.querySelector(".edit-mode").textContent = reading ? "Read mode" : "Edit mode";
+        translateInterface();
+      }
+
+      function updateJapaneseAnalyzer() {
+        const visible = noteLanguage.value === "JP";
+        japaneseAnalyzer.hidden = !visible;
+        japaneseAnalyzerBody.hidden = !state.japaneseAnalyzerOpen;
+        document.querySelector("#toggleJapaneseAnalyzer").textContent = state.japaneseAnalyzerOpen ? "收起" : "展开";
+        translateInterface();
+      }
+
+      const japaneseReadings = {
+        "今日": ["きょう", "kyō"],
+        "短": ["みじか", "mijika"],
+        "段落": ["だんらく", "danraku"],
+        "使": ["つか", "tsuka"],
+        "文章": ["ぶんしょう", "bunshō"],
+        "一度": ["いちど", "ichido"],
+        "聞": ["き", "ki"],
+        "練習": ["れんしゅう", "renshū"],
+        "取": ["と", "to"],
+        "方": ["かた", "kata"],
+        "ニュース": ["ニュース", "nyūsu"]
+      };
+
+      const kanaRomanization = {
+        "あ":"a","い":"i","う":"u","え":"e","お":"o","か":"ka","き":"ki","く":"ku","け":"ke","こ":"ko",
+        "さ":"sa","し":"shi","す":"su","せ":"se","そ":"so","た":"ta","ち":"chi","つ":"tsu","て":"te","と":"to",
+        "な":"na","に":"ni","ぬ":"nu","ね":"ne","の":"no","は":"ha","ひ":"hi","ふ":"fu","へ":"he","ほ":"ho",
+        "ま":"ma","み":"mi","む":"mu","め":"me","も":"mo","や":"ya","ゆ":"yu","よ":"yo","ら":"ra","り":"ri",
+        "る":"ru","れ":"re","ろ":"ro","わ":"wa","を":"o","ん":"n","が":"ga","ぎ":"gi","ぐ":"gu","げ":"ge",
+        "ご":"go","ざ":"za","じ":"ji","ず":"zu","ぜ":"ze","ぞ":"zo","だ":"da","で":"de","ど":"do","ば":"ba",
+        "び":"bi","ぶ":"bu","べ":"be","ぼ":"bo","ぱ":"pa","ぴ":"pi","ぷ":"pu","ぺ":"pe","ぽ":"po","っ":"",
+        "ア":"a","イ":"i","ウ":"u","エ":"e","オ":"o","カ":"ka","キ":"ki","ク":"ku","ケ":"ke","コ":"ko",
+        "サ":"sa","シ":"shi","ス":"su","セ":"se","ソ":"so","タ":"ta","チ":"chi","ツ":"tsu","テ":"te","ト":"to",
+        "ナ":"na","ニ":"ni","ヌ":"nu","ネ":"ne","ノ":"no","ハ":"ha","ヒ":"hi","フ":"fu","ヘ":"he","ホ":"ho",
+        "マ":"ma","ミ":"mi","ム":"mu","メ":"me","モ":"mo","ヤ":"ya","ユ":"yu","ヨ":"yo","ラ":"ra","リ":"ri",
+        "ル":"ru","レ":"re","ロ":"ro","ワ":"wa","ヲ":"o","ン":"n","ー":""
+      };
+
+      let japaneseTokens = [];
+
+      function romanizeKana(value) {
+        return [...value].map((character) => kanaRomanization[character] ?? character).join("");
+      }
+
+      function tokenizeJapanese(value) {
+        return (value.match(/[\u4e00-\u9fff]+|[\u3040-\u309f]+|[\u30a0-\u30ffー]+|[A-Za-zÀ-ÿ]+|\d+|[^\s]/g) || [])
+          .map((text) => {
+            const known = japaneseReadings[text];
+            const isKana = /^[\u3040-\u30ffー]+$/.test(text);
+            return {
+              text,
+              reading: known?.[0] || (isKana ? text : ""),
+              romaji: known?.[1] || (isKana ? romanizeKana(text) : "")
+            };
+          });
+      }
+
+      function renderJapaneseAnalysis() {
+        const showFurigana = document.querySelector("#showJapaneseFurigana").checked;
+        const showRomaji = document.querySelector("#showJapaneseRomaji").checked;
+        japaneseAnalysisResult.innerHTML = japaneseTokens.map((token) => `
+          <span class="japanese-token">
+            <ruby>${escapeHtml(token.text)}${showFurigana && token.reading && token.reading !== token.text ? `<rt>${escapeHtml(token.reading)}</rt>` : ""}</ruby>
+            ${showRomaji && token.romaji ? `<small>${escapeHtml(token.romaji)}</small>` : ""}
+          </span>
+        `).join("");
+        japaneseAnalysisResult.hidden = japaneseTokens.length === 0;
+      }
+
+      function analyzeJapaneseText() {
+        const value = japaneseAnalyzerText.value.trim();
+        const status = document.querySelector("#japaneseAnalyzerStatus");
+        if (!value) {
+          status.textContent = "请输入需要解析的日语句子。";
+          japaneseAnalyzerText.focus();
+          return;
+        }
+        japaneseTokens = tokenizeJapanese(value);
+        renderJapaneseAnalysis();
+        status.textContent = `已拆分 ${japaneseTokens.length} 个片段。`;
+      }
+
+      function currentNote() {
+        return state.notes.find((note) => note.id === state.selectedNoteId) || state.notes[0];
+      }
+
+      function isEmptyDraft(note) {
+        if (!note?.isDraft) return false;
+        const host = document.createElement("div");
+        host.innerHTML = note.content || "";
+        return !note.title.trim() && !host.textContent.trim();
+      }
+
+      function persistableState() {
+        const snapshot = clone(state);
+        snapshot.notes = snapshot.notes.filter((note) => !isEmptyDraft(note));
+        if (!snapshot.notes.some((note) => note.id === snapshot.selectedNoteId)) {
+          snapshot.selectedNoteId = snapshot.notes[0]?.id || initialState.selectedNoteId;
+        }
+        return snapshot;
+      }
+
+      function blankNote() {
+        return {
+          id: `note-${Date.now()}-${Math.random().toString(16).slice(2, 7)}`,
+          title: "",
+          language: "NL",
+          date: new Date().toISOString().slice(0, 10),
+          updated: "刚刚",
+          updatedAt: Date.now(),
+          content: "",
+          media: null,
+          isDraft: true
+        };
+      }
+
+      function allHistoryNotes() {
+        return historyScope === "trash" ? state.trashNotes : state.notes;
+      }
+
+      function filteredHistoryNotes() {
+        const query = historySearch.value.trim().toLocaleLowerCase();
+        let notes = allHistoryNotes().filter((note) => {
+          const searchable = `${note.title} ${plainText(note.content)} ${note.language} ${note.media?.url || ""}`.toLocaleLowerCase();
+          const languageMatches = historyLanguage.value === "all" || note.language === historyLanguage.value;
+          return languageMatches && (!query || searchable.includes(query));
+        });
+
+        if (historyScope === "recent") {
+          notes = notes
+            .slice()
+            .sort((a, b) => noteUpdatedTime(b) - noteUpdatedTime(a))
+            .slice(0, 6);
+        }
+
+        const sort = historySort.value;
+        return notes.slice().sort((a, b) => {
+          if (sort === "title") return (a.title || "未命名文本").localeCompare(b.title || "未命名文本", "zh-CN");
+          if (sort === "language") return (a.language || "").localeCompare(b.language || "");
+          if (sort === "date") return String(b.date || "").localeCompare(String(a.date || ""));
+          return noteUpdatedTime(b) - noteUpdatedTime(a);
+        });
+      }
+
+      function updateHistoryCounts() {
+        const count = state.notes.filter((note) => !isEmptyDraft(note)).length;
+        document.querySelector("#historyNavCount").textContent = String(count).padStart(2, "0");
+        document.querySelector("#historyTotalCount").textContent = String(count).padStart(2, "0");
+      }
+
+      function updateHistorySelection(visibleNotes = filteredHistoryNotes()) {
+        const visibleIds = new Set(visibleNotes.map((note) => note.id));
+        selectedHistoryIds = new Set([...selectedHistoryIds].filter((id) => visibleIds.has(id)));
+        const count = selectedHistoryIds.size;
+        document.querySelector("#historySelectionCount").textContent = `已选 ${count} 项`;
+        document.querySelector("#historyExportSelected").disabled = count === 0;
+        const deleteSelected = document.querySelector("#historyDeleteSelected");
+        deleteSelected.disabled = count === 0;
+        deleteSelected.textContent = historyScope === "trash" ? "永久删除" : "移入回收站";
+        historySelectAll.checked = visibleNotes.length > 0 && visibleNotes.every((note) => selectedHistoryIds.has(note.id));
+        historySelectAll.indeterminate = count > 0 && !historySelectAll.checked;
+      }
+
+      function renderHistory() {
+        updateHistoryCounts();
+        const notes = filteredHistoryNotes();
+        historyResults.dataset.layout = state.historyLayout || "list";
+        historyResults.hidden = false;
+        historyReader.hidden = true;
+        activeReaderId = "";
+
+        document.querySelectorAll("[data-history-scope]").forEach((button) => {
+          button.setAttribute("aria-pressed", String(button.dataset.historyScope === historyScope));
+        });
+        document.querySelectorAll("[data-history-layout]").forEach((button) => {
+          button.setAttribute("aria-pressed", String(button.dataset.historyLayout === state.historyLayout));
+        });
+
+        historyResults.innerHTML = notes.length ? notes.map((note) => {
+          const title = note.title || "未命名文本";
+          const preview = plainText(note.content) || "这篇全文还没有正文。";
+          const mediaLabel = note.media?.url ? ` · ${note.media.type === "audio" ? "音频" : "视频"}` : "";
+          const actions = historyScope === "trash"
+            ? `<button type="button" data-history-restore="${escapeHtml(note.id)}">恢复</button>
+               <button type="button" data-history-permanent="${escapeHtml(note.id)}">永久删除</button>`
+            : `<button type="button" data-history-open="${escapeHtml(note.id)}">阅读</button>
+               <button type="button" data-history-edit="${escapeHtml(note.id)}">编辑</button>
+               <button type="button" data-history-delete="${escapeHtml(note.id)}">回收</button>`;
+          return `
+            <article class="history-card" data-history-card="${escapeHtml(note.id)}">
+              <input type="checkbox" data-history-select="${escapeHtml(note.id)}" aria-label="选择 ${escapeHtml(title)}"${selectedHistoryIds.has(note.id) ? " checked" : ""}>
+              <div>
+                <h3><button type="button" data-history-open="${escapeHtml(note.id)}">${escapeHtml(title)}</button></h3>
+                <small>${escapeHtml(formatNoteDate(note))}${mediaLabel}</small>
+                <p>${escapeHtml(preview)}</p>
+              </div>
+              <div class="history-card-actions">${actions}</div>
+            </article>
+          `;
+        }).join("") : `<div class="collection-empty">没有符合条件的全文。</div>`;
+
+        updateHistorySelection(notes);
+        translateInterface();
+      }
+
+      function findHistoryNote(id) {
+        return state.notes.find((note) => note.id === id)
+          || state.trashNotes.find((note) => note.id === id);
+      }
+
+      function openHistoryReader(id) {
+        const note = findHistoryNote(id);
+        if (!note) return;
+        activeReaderId = id;
+        document.querySelector("#historyReaderTitle").textContent = note.title || "未命名文本";
+        document.querySelector("#historyReaderMeta").textContent = formatNoteDate(note);
+        const media = note.media?.url && /^https?:\/\//i.test(note.media.url)
+          ? `<p><a href="${escapeHtml(note.media.url)}" target="_blank" rel="noopener noreferrer">打开已保存的${note.media.type === "audio" ? "音频" : "视频"}</a></p>`
+          : "";
+        document.querySelector("#historyReaderBody").innerHTML = `${media}${sanitizeNoteHtml(note.content) || "<p>这篇全文还没有正文。</p>"}`;
+        historyResults.hidden = true;
+        historyReader.hidden = false;
+        historyReader.scrollIntoView({ block: "start", behavior: reducedMotionQuery.matches ? "auto" : "smooth" });
+      }
+
+      function editHistoryNote(id) {
+        const inTrash = state.trashNotes.some((note) => note.id === id);
+        if (inTrash) restoreNotes([id], false);
+        if (!state.notes.some((note) => note.id === id)) return;
+        state.selectedNoteId = id;
+        renderNoteList();
+        loadEditor();
+        setNoteSubview("editor");
+        noteTitle.focus();
+      }
+
+      function moveNotesToTrash(ids, announceMove = true) {
+        const idSet = new Set(ids);
+        const moved = state.notes.filter((note) => idSet.has(note.id));
+        if (!moved.length) return;
+        state.notes = state.notes.filter((note) => !idSet.has(note.id));
+        state.trashNotes.unshift(...moved.map((note) => ({ ...note, trashedAt: Date.now(), isDraft: false })));
+        if (!state.notes.length) state.notes.push(blankNote());
+        if (!state.notes.some((note) => note.id === state.selectedNoteId)) state.selectedNoteId = state.notes[0].id;
+        selectedHistoryIds.clear();
+        renderNoteList();
+        loadEditor();
+        renderHistory();
+        saveState();
+        if (announceMove) announce("已移入回收站");
+      }
+
+      function restoreNotes(ids, announceRestore = true) {
+        const idSet = new Set(ids);
+        const restored = state.trashNotes.filter((note) => idSet.has(note.id));
+        if (!restored.length) return;
+        state.trashNotes = state.trashNotes.filter((note) => !idSet.has(note.id));
+        const existingIds = new Set(state.notes.map((note) => note.id));
+        state.notes.unshift(...restored.map((note) => ({
+          ...note,
+          id: existingIds.has(note.id) ? `note-${Date.now()}-${Math.random().toString(16).slice(2, 7)}` : note.id,
+          trashedAt: undefined,
+          updated: "刚刚",
+          updatedAt: Date.now()
+        })));
+        selectedHistoryIds.clear();
+        renderNoteList();
+        renderHistory();
+        saveState();
+        if (announceRestore) announce("全文已恢复");
+      }
+
+      function permanentlyDeleteNotes(ids) {
+        const idSet = new Set(ids);
+        state.trashNotes = state.trashNotes.filter((note) => !idSet.has(note.id));
+        selectedHistoryIds.clear();
+        renderHistory();
+        saveState();
+        announce("已永久删除");
+      }
+
+      function downloadJson(payload, filename) {
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = filename;
+        document.body.append(anchor);
+        anchor.click();
+        anchor.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      }
+
+      function exportSelectedHistory() {
+        const source = allHistoryNotes();
+        const notes = source.filter((note) => selectedHistoryIds.has(note.id));
+        if (!notes.length) return;
+        downloadJson({
+          kind: "coachone-document-export",
+          exportedAt: new Date().toISOString(),
+          notes
+        }, `coachone-documents-${new Date().toISOString().slice(0, 10)}.json`);
+        historyStatus.textContent = `已下载 ${notes.length} 篇全文。`;
+      }
+
+      function downloadPrototypeBackup() {
+        downloadJson({
+          kind: "coachone-prototype-backup",
+          version: 1,
+          exportedAt: new Date().toISOString(),
+          state: persistableState()
+        }, `coachone-backup-${new Date().toISOString().slice(0, 10)}.json`);
+        backupStatus.textContent = "备份已下载。";
+      }
+
+      async function restorePrototypeBackup(file) {
+        if (!file) return;
+        try {
+          const parsed = JSON.parse(await file.text());
+          const candidate = parsed.state || parsed;
+          if (!Array.isArray(candidate.notes)) throw new Error("Invalid backup");
+          if (!window.confirm("用此文件恢复原型数据？当前内容会被替换。")) return;
+
+          const restored = {
+            ...clone(initialState),
+            ...candidate,
+            preferences: {
+              ...clone(initialState.preferences),
+              ...(candidate.preferences || {})
+            },
+            notes: candidate.notes.map((note, index) => ({
+              ...note,
+              id: String(note.id || `note-restored-${index}-${Date.now()}`),
+              title: String(note.title || ""),
+              content: sanitizeNoteHtml(note.content),
+              media: note.media?.url && /^https?:\/\//i.test(note.media.url)
+                ? { type: note.media.type === "audio" ? "audio" : "video", url: note.media.url }
+                : null,
+              updatedAt: Number(note.updatedAt) || Date.parse(note.date || "") || Date.now() - index
+            })),
+            trashNotes: Array.isArray(candidate.trashNotes)
+              ? candidate.trashNotes.map((note, index) => ({
+                  ...note,
+                  id: String(note.id || `note-trash-${index}-${Date.now()}`),
+                  content: sanitizeNoteHtml(note.content),
+                  updatedAt: Number(note.updatedAt) || Date.now() - index
+                }))
+              : [],
+            resources: Array.isArray(candidate.resources) ? candidate.resources : clone(initialState.resources)
+          };
+          if (!restored.notes.length) restored.notes.push(blankNote());
+          if (!restored.notes.some((note) => note.id === restored.selectedNoteId)) {
+            restored.selectedNoteId = restored.notes[0].id;
+          }
+          Object.keys(state).forEach((key) => delete state[key]);
+          Object.assign(state, restored);
+          historyScope = "all";
+          selectedHistoryIds.clear();
+          globalSearch.value = "";
+          historySearch.value = "";
+          historyLanguage.value = "all";
+          historySort.value = "updated";
+          document.body.dataset.theme = state.theme;
+          applyPreferences();
+          renderNoteList();
+          loadEditor();
+          renderResources();
+          renderHistory();
+          setActiveTab(state.activeTab || "notes", false);
+          setNoteSubview(state.noteSubview || "editor", { persist: false });
+          saveState();
+          backupStatus.textContent = "备份恢复完成。";
+          announce("备份已恢复");
+        } catch (error) {
+          backupStatus.textContent = "无法读取这个备份文件。";
+          console.warn(error);
+        } finally {
+          document.querySelector("#restorePrototypeBackup").value = "";
+        }
+      }
+
+      function finalizeCurrentNote() {
+        const note = currentNote();
+        if (!note) return;
+        captureEditor();
+        if (!note.title.trim()) {
+          note.title = "未命名文本";
+          noteTitle.value = note.title;
+        }
+        note.isDraft = false;
+        note.updated = "刚刚";
+        note.updatedAt = Date.now();
+        renderNoteList();
+        renderHistory();
+        saveState();
+        noteStatus.textContent = "全文已保存到历史 · 刚刚";
+        announce("全文已保存");
+      }
+
+      function updateWordCount() {
+        const text = editorArea.innerText.trim();
+        const latinWords = text.match(/[A-Za-zÀ-ÿ]+(?:['’-][A-Za-zÀ-ÿ]+)*/g) || [];
+        const cjkCharacters = text.match(/[\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af]/g) || [];
+        const total = latinWords.length + cjkCharacters.length;
+        wordCount.textContent = `${total} 字词`;
+      }
+
+      function updateLanguageSummary() {
+        const counts = state.notes.reduce((result, note) => {
+          result[note.language] = (result[note.language] || 0) + 1;
+          return result;
+        }, {});
+        document.querySelector("#languageSummary").textContent = Object.entries(counts)
+          .map(([language, count]) => `${language} ${count}`)
+          .join(" · ");
+      }
+
+      function renderNoteList() {
+        const query = globalSearch.value.trim().toLocaleLowerCase();
+        const visibleNotes = state.notes.filter((note) => {
+          const searchable = `${note.title} ${plainText(note.content)} ${note.language} ${note.updated}`.toLocaleLowerCase();
+          return !query || searchable.includes(query);
+        });
+
+        noteList.innerHTML = visibleNotes.map((note) => `
+          <li>
+            <button class="note-list-item" type="button" data-note-id="${escapeHtml(note.id)}"${note.id === state.selectedNoteId ? ' aria-current="page"' : ""}>
+              <span class="note-list-main">
+                <strong>${escapeHtml(note.title || "未命名文本")}</strong>
+                <small>${escapeHtml(note.updated)}</small>
+              </span>
+              <span class="note-language">${escapeHtml(note.language)}</span>
+            </button>
+            <button class="delete-note" type="button" data-delete-note="${escapeHtml(note.id)}" aria-label="删除 ${escapeHtml(note.title || "未命名文本")}">×</button>
+          </li>
+        `).join("");
+
+        noteCount.textContent = String(state.notes.length).padStart(2, "0");
+        document.querySelector("#notesTabCount").textContent = String(state.notes.length).padStart(2, "0");
+        updateLanguageSummary();
+        updateHistoryCounts();
+        translateInterface();
+      }
+
+      function loadEditor() {
+        const note = currentNote();
+        if (!note) return;
+        noteLanguage.value = note.language;
+        noteDate.value = note.date;
+        noteTitle.value = note.title;
+        editorArea.innerHTML = sanitizeNoteHtml(note.content);
+        loadMediaPanel();
+        applyEditorMode();
+        updateJapaneseAnalyzer();
+        updateWordCount();
+      }
+
+      function captureEditor() {
+        const note = currentNote();
+        if (!note) return;
+        note.title = noteTitle.value;
+        note.language = noteLanguage.value;
+        note.date = noteDate.value;
+        note.content = sanitizeNoteHtml(editorArea.innerHTML);
+        note.updated = "刚刚";
+        note.updatedAt = Date.now();
+        note.isDraft = false;
+        updateWordCount();
+        renderNoteList();
+        saveState();
+      }
+
+      function selectNote(id) {
+        if (id === state.selectedNoteId) return;
+        const previousNote = currentNote();
+        if (isEmptyDraft(previousNote)) {
+          state.notes = state.notes.filter((note) => note.id !== previousNote.id);
+        }
+        state.selectedNoteId = id;
+        renderNoteList();
+        loadEditor();
+        saveState();
+      }
+
+      function addNote() {
+        const note = blankNote();
+        state.notes.unshift(note);
+        state.selectedNoteId = note.id;
+        globalSearch.value = "";
+        renderNoteList();
+        loadEditor();
+        setNoteSubview("editor", { persist: false });
+        noteStatus.textContent = "输入后自动保存";
+        noteTitle.focus();
+        announce("新文本已准备好");
+      }
+
+      function deleteNote(id) {
+        const note = state.notes.find((item) => item.id === id);
+        if (!note) return;
+        if (!window.confirm(`将“${note.title || "未命名文本"}”移入回收站？`)) return;
+        moveNotesToTrash([id]);
+      }
+
+      function filteredResources() {
+        const query = globalSearch.value.trim().toLocaleLowerCase();
+        return state.resources.filter((resource) => {
+          const matchesFilter = state.collectionFilter === "all" || resource.kind === state.collectionFilter;
+          const searchable = `${resource.title} ${resource.detail} ${resource.content || ""} ${kindLabels[resource.kind]}`.toLocaleLowerCase();
+          return matchesFilter && (!query || searchable.includes(query));
+        });
+      }
+
+      function renderResources() {
+        const resources = filteredResources();
+        collectionList.innerHTML = resources.map((resource, index) => {
+          const preview = escapeHtml(resource.content || resource.detail || "").replaceAll("\n", "<br>");
+          return `
+          <li class="collection-parallax-item">
+            <article class="collection-item reveal" data-resource-id="${escapeHtml(resource.id)}" data-kind="${escapeHtml(resource.kind)}" style="--reveal-delay:${Math.min(index * 45, 225)}ms">
+              <span class="artifact-index">${String(index + 1).padStart(2, "0")} / ${String(resources.length).padStart(2, "0")}</span>
+              <span class="collection-symbol" aria-hidden="true">${kindSymbols[resource.kind]}</span>
+              <span class="collection-copy">
+                <span class="collection-name" contenteditable="true" spellcheck="false" data-resource-title="${escapeHtml(resource.id)}">${escapeHtml(resource.title)}</span>
+                <small class="collection-detail">${escapeHtml(resource.detail)}</small>
+                <p class="collection-preview">${preview}</p>
+              </span>
+              <span class="collection-kind">${kindLabels[resource.kind]}</span>
+              <button class="delete-resource" type="button" data-delete-resource="${escapeHtml(resource.id)}" aria-label="删除 ${escapeHtml(resource.title)}">×</button>
+            </article>
+          </li>
+        `;
+        }).join("");
+
+        collectionList.hidden = resources.length === 0;
+        collectionEmpty.hidden = resources.length !== 0;
+        collectionCount.textContent = String(state.resources.length).padStart(2, "0");
+        document.querySelector("#collectionsTabCount").textContent = String(state.resources.length).padStart(2, "0");
+        activeCollectionLabel.textContent = state.collectionFilter === "all"
+          ? "全部"
+          : kindLabels[state.collectionFilter];
+
+        document.querySelectorAll(".filter-chip").forEach((button) => {
+          button.setAttribute("aria-pressed", String(button.dataset.filter === state.collectionFilter));
+        });
+        observeReveals();
+        queueCollectionParallax();
+        masonryObserver?.disconnect();
+        collectionList.querySelectorAll(".collection-item").forEach((card) => masonryObserver?.observe(card));
+        queueCollectionMasonry();
+        translateInterface();
+      }
+
+      function addResource() {
+        const title = resourceTitle.value.trim();
+        if (!title) {
+          resourceTitle.focus();
+          return;
+        }
+        const kind = resourceKind.value;
+        const id = `resource-${Date.now()}`;
+        state.resources.unshift({
+          id,
+          title,
+          detail: resourceDetail.value.trim() || "新收藏 · 刚刚添加",
+          content: resourceDetail.value.trim() || "刚刚加入 Collections。",
+          kind
+        });
+        state.collectionFilter = kind;
+        globalSearch.value = "";
+        renderNoteList();
+        renderResources();
+        saveState();
+        closeResourceModal();
+        announce("已添加到收藏夹");
+      }
+
+      function deleteResource(id) {
+        const resource = state.resources.find((item) => item.id === id);
+        if (!resource || !window.confirm(`删除“${resource.title}”？`)) return;
+        state.resources = state.resources.filter((item) => item.id !== id);
+        renderResources();
+        saveState();
+      }
+
+      function updateToday() {
+        const today = document.querySelector("#today");
+        if (!today) return;
+        today.textContent = new Intl.DateTimeFormat("en-GB", {
+          weekday: "short",
+          day: "2-digit",
+          month: "short",
+          year: "numeric"
+        }).format(new Date()).replaceAll(",", "").toUpperCase();
+      }
+
+      function initialize() {
+        state.notes.forEach((note, index) => {
+          note.media = note.media || null;
+          note.updatedAt = Number(note.updatedAt) || Date.parse(note.date || "") || Date.now() - index;
+        });
+        state.trashNotes = Array.isArray(state.trashNotes) ? state.trashNotes : [];
+        state.preferences = { ...clone(initialState.preferences), ...(state.preferences || {}) };
+        document.body.dataset.theme = state.theme;
+        if ("ResizeObserver" in window) {
+          masonryObserver = new ResizeObserver(queueCollectionMasonry);
+        }
+        setupRevealObserver();
+        updateToday();
+        applyPreferences();
+        renderNoteList();
+        loadEditor();
+        renderResources();
+        renderHistory();
+        setActiveTab(state.activeTab || "notes", false);
+        setNoteSubview(state.noteSubview || "editor", { persist: false });
+      }
+
+      document.querySelector("#newTextButton").addEventListener("click", addNote);
+      document.querySelector("#addResourceButton").addEventListener("click", openResourceModal);
+      noteRail.querySelector(".note-workspace-nav").addEventListener("click", (event) => {
+        const button = event.target.closest("[data-note-subview]");
+        if (button) setNoteSubview(button.dataset.noteSubview);
+      });
+
+      document.querySelector("#historyNewText").addEventListener("click", addNote);
+      document.querySelector("#refreshHistory").addEventListener("click", () => {
+        renderHistory();
+        historyStatus.textContent = "历史全文已刷新。";
+      });
+      document.querySelector("#saveFullText").addEventListener("click", finalizeCurrentNote);
+      editorModeToggle.addEventListener("click", () => {
+        if (state.editorMode !== "read") captureEditor();
+        state.editorMode = state.editorMode === "read" ? "edit" : "read";
+        applyEditorMode();
+        saveState();
+      });
+      document.querySelector("#openMediaPanel").addEventListener("click", () => {
+        mediaDrawer.hidden = !mediaDrawer.hidden;
+        if (!mediaDrawer.hidden) {
+          loadMediaPanel();
+          mediaUrl.focus();
+        }
+      });
+      document.querySelector("#closeMediaDrawer").addEventListener("click", () => {
+        mediaDrawer.hidden = true;
+        document.querySelector("#openMediaPanel").focus();
+      });
+      document.querySelector("#attachMedia").addEventListener("click", saveMediaLink);
+      document.querySelector("#removeMedia").addEventListener("click", removeMediaLink);
+      document.querySelector("#toggleJapaneseAnalyzer").addEventListener("click", () => {
+        state.japaneseAnalyzerOpen = !state.japaneseAnalyzerOpen;
+        updateJapaneseAnalyzer();
+        saveState();
+      });
+      document.querySelector("#useJapaneseSelection").addEventListener("click", () => {
+        const selection = window.getSelection()?.toString().trim();
+        japaneseAnalyzerText.value = selection || editorArea.innerText.trim();
+        document.querySelector("#japaneseAnalyzerStatus").textContent = selection
+          ? "已带入正文选区。"
+          : "已带入当前正文。";
+      });
+      document.querySelector("#analyzeJapanese").addEventListener("click", analyzeJapaneseText);
+      document.querySelector("#showJapaneseFurigana").addEventListener("change", renderJapaneseAnalysis);
+      document.querySelector("#showJapaneseRomaji").addEventListener("change", renderJapaneseAnalysis);
+
+      [historySearch, historyLanguage, historySort].forEach((control) => {
+        control.addEventListener(control.tagName === "INPUT" ? "input" : "change", () => {
+          selectedHistoryIds.clear();
+          renderHistory();
+        });
+      });
+
+      document.querySelector("#clearHistoryFilters").addEventListener("click", () => {
+        historySearch.value = "";
+        historyLanguage.value = "all";
+        historySort.value = "updated";
+        selectedHistoryIds.clear();
+        renderHistory();
+      });
+
+      document.querySelector(".history-switches").addEventListener("click", (event) => {
+        const scopeButton = event.target.closest("[data-history-scope]");
+        if (scopeButton) {
+          historyScope = scopeButton.dataset.historyScope;
+          selectedHistoryIds.clear();
+          historyStatus.textContent = "";
+          renderHistory();
+          return;
+        }
+        const layoutButton = event.target.closest("[data-history-layout]");
+        if (layoutButton) {
+          state.historyLayout = layoutButton.dataset.historyLayout;
+          renderHistory();
+          saveState();
+        }
+      });
+
+      historyResults.addEventListener("change", (event) => {
+        const checkbox = event.target.closest("[data-history-select]");
+        if (!checkbox) return;
+        if (checkbox.checked) selectedHistoryIds.add(checkbox.dataset.historySelect);
+        else selectedHistoryIds.delete(checkbox.dataset.historySelect);
+        updateHistorySelection();
+      });
+
+      historyResults.addEventListener("click", (event) => {
+        const openButton = event.target.closest("[data-history-open]");
+        if (openButton) {
+          openHistoryReader(openButton.dataset.historyOpen);
+          return;
+        }
+        const editButton = event.target.closest("[data-history-edit]");
+        if (editButton) {
+          editHistoryNote(editButton.dataset.historyEdit);
+          return;
+        }
+        const deleteButton = event.target.closest("[data-history-delete]");
+        if (deleteButton) {
+          const note = findHistoryNote(deleteButton.dataset.historyDelete);
+          if (note && window.confirm(`将“${note.title || "未命名文本"}”移入回收站？`)) {
+            moveNotesToTrash([note.id]);
+          }
+          return;
+        }
+        const restoreButton = event.target.closest("[data-history-restore]");
+        if (restoreButton) {
+          restoreNotes([restoreButton.dataset.historyRestore]);
+          return;
+        }
+        const permanentButton = event.target.closest("[data-history-permanent]");
+        if (permanentButton && window.confirm("永久删除这篇全文？此操作无法撤销。")) {
+          permanentlyDeleteNotes([permanentButton.dataset.historyPermanent]);
+        }
+      });
+
+      historySelectAll.addEventListener("change", () => {
+        const ids = filteredHistoryNotes().map((note) => note.id);
+        selectedHistoryIds = historySelectAll.checked ? new Set(ids) : new Set();
+        renderHistory();
+      });
+
+      document.querySelector("#historyExportSelected").addEventListener("click", exportSelectedHistory);
+      document.querySelector("#historyDeleteSelected").addEventListener("click", () => {
+        const ids = [...selectedHistoryIds];
+        if (!ids.length) return;
+        if (historyScope === "trash") {
+          if (window.confirm(`永久删除选中的 ${ids.length} 篇全文？此操作无法撤销。`)) {
+            permanentlyDeleteNotes(ids);
+          }
+        } else if (window.confirm(`将选中的 ${ids.length} 篇全文移入回收站？`)) {
+          moveNotesToTrash(ids);
+        }
+      });
+
+      document.querySelector("#closeHistoryReader").addEventListener("click", () => {
+        activeReaderId = "";
+        historyReader.hidden = true;
+        historyResults.hidden = false;
+      });
+      document.querySelector("#editHistoryReader").addEventListener("click", () => {
+        if (activeReaderId) editHistoryNote(activeReaderId);
+      });
+
+      prototypeLanguage.addEventListener("change", () => {
+        state.preferences.displayLanguage = prototypeLanguage.value;
+        applyPreferences();
+        renderHistory();
+        saveState();
+      });
+      prototypeFontScale.addEventListener("input", () => {
+        state.preferences.fontScale = Number(prototypeFontScale.value);
+        applyPreferences();
+      });
+      prototypeFontScale.addEventListener("change", saveState);
+      prototypeAudioSpeed.addEventListener("change", () => {
+        state.preferences.audioSpeed = Number(prototypeAudioSpeed.value);
+        applyPreferences();
+        saveState();
+      });
+      document.querySelector("#downloadPrototypeBackup").addEventListener("click", downloadPrototypeBackup);
+      document.querySelector("#restorePrototypeBackup").addEventListener("change", (event) => {
+        restorePrototypeBackup(event.target.files?.[0]);
+      });
+
+      window.addEventListener("scroll", queueCollectionParallax, { passive: true });
+      window.addEventListener("resize", () => {
+        queueCollectionParallax();
+        queueCollectionMasonry();
+      });
+      reducedMotionQuery.addEventListener?.("change", queueCollectionParallax);
+      document.fonts?.ready.then(queueCollectionMasonry);
+
+      noteList.addEventListener("click", (event) => {
+        const noteButton = event.target.closest("[data-note-id]");
+        if (noteButton) selectNote(noteButton.dataset.noteId);
+
+        const deleteButton = event.target.closest("[data-delete-note]");
+        if (deleteButton) {
+          event.stopPropagation();
+          deleteNote(deleteButton.dataset.deleteNote);
+        }
+      });
+
+      noteTitle.addEventListener("input", captureEditor);
+      noteLanguage.addEventListener("change", () => {
+        captureEditor();
+        updateJapaneseAnalyzer();
+      });
+      noteDate.addEventListener("change", captureEditor);
+      editorArea.addEventListener("input", captureEditor);
+
+      document.querySelector(".editor-toolbar").addEventListener("mousedown", (event) => {
+        const button = event.target.closest("[data-command], [data-editor-action]");
+        if (!button || state.editorMode === "read") return;
+        event.preventDefault();
+        editorArea.focus();
+        if (button.dataset.command) {
+          document.execCommand(button.dataset.command, false, button.dataset.value || null);
+        } else if (button.dataset.editorAction === "link") {
+          const url = window.prompt("输入链接地址", "https://");
+          if (url && /^https?:\/\//i.test(url)) document.execCommand("createLink", false, url);
+        } else if (button.dataset.editorAction === "divider") {
+          document.execCommand("insertHorizontalRule");
+        } else if (button.dataset.editorAction === "table") {
+          document.execCommand("insertHTML", false, "<table><tbody><tr><td>内容</td><td>内容</td></tr><tr><td>内容</td><td>内容</td></tr></tbody></table><p><br></p>");
+        }
+        button.closest("details")?.removeAttribute("open");
+        captureEditor();
+      });
+
+      primaryTabs.addEventListener("click", (event) => {
+        const tab = event.target.closest("[data-tab]");
+        if (tab) setActiveTab(tab.dataset.tab);
+      });
+
+      primaryTabs.addEventListener("keydown", (event) => {
+        if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+        event.preventDefault();
+        const nextName = state.activeTab === "notes" ? "collections" : "notes";
+        const nextButton = primaryTabs.querySelector(`[data-tab="${nextName}"]`);
+        setActiveTab(nextName);
+        nextButton.focus();
+      });
+
+      document.querySelector(".filter-chips").addEventListener("click", (event) => {
+        const tab = event.target.closest("[data-filter]");
+        if (!tab) return;
+        state.collectionFilter = tab.dataset.filter;
+        renderResources();
+        saveState();
+      });
+
+      resourceForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        addResource();
+      });
+
+      document.querySelector("#closeResourceModal").addEventListener("click", closeResourceModal);
+      document.querySelector("#cancelResourceModal").addEventListener("click", closeResourceModal);
+
+      resourceModal.addEventListener("click", (event) => {
+        if (event.target === resourceModal) closeResourceModal();
+      });
+
+      resourceKindTrigger.addEventListener("click", () => toggleDropdown());
+
+      resourceKindDropdown.querySelector(".dropdown-menu").addEventListener("click", (event) => {
+        const option = event.target.closest("[data-kind-value]");
+        if (!option) return;
+        setResourceKind(option.dataset.kindValue);
+        closeDropdown();
+        resourceKindTrigger.focus();
+      });
+
+      collectionList.addEventListener("input", (event) => {
+        const editable = event.target.closest("[data-resource-title]");
+        if (!editable) return;
+        const resource = state.resources.find((item) => item.id === editable.dataset.resourceTitle);
+        if (!resource) return;
+        resource.title = editable.textContent.trim();
+        editable.closest(".collection-item")?.querySelector("[data-delete-resource]")
+          ?.setAttribute("aria-label", `删除 ${resource.title || "未命名收藏"}`);
+        saveState();
+      });
+
+      collectionList.addEventListener("click", (event) => {
+        const deleteButton = event.target.closest("[data-delete-resource]");
+        if (deleteButton) deleteResource(deleteButton.dataset.deleteResource);
+      });
+
+      globalSearch.addEventListener("input", () => {
+        renderNoteList();
+        renderResources();
+      });
+
+      document.addEventListener("click", (event) => {
+        if (!event.target.closest("#resourceKindDropdown")) closeDropdown();
+      });
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") return;
+        if (resourceKindDropdown.classList.contains("is-open")) {
+          closeDropdown();
+          resourceKindTrigger.focus();
+          return;
+        }
+        if (!resourceModal.hidden) closeResourceModal();
+      });
+
+      window.addEventListener("beforeunload", () => {
+        window.clearTimeout(saveTimer);
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(persistableState()));
+        } catch (error) {
+          console.warn(error);
+        }
+      });
+
+      initialize();
+    })();
+  </script>
+</body>
+</html>
